@@ -546,22 +546,25 @@ function Row({
               key={id}
               type="button"
               title="Xem ảnh"
-              // 6 ảnh trên màn hình thường, 10 ảnh trên màn hình lớn
-              className={cn("focus-visible:ring-ring shrink-0 rounded outline-none focus-visible:ring-2", i >= 6 && "hidden 2xl:block")}
+              // 4 ảnh trên cửa sổ hẹp, 6 ảnh trên màn hình thường, 10 ảnh trên màn hình lớn
+              className={cn(
+                "focus-visible:ring-ring shrink-0 rounded outline-none focus-visible:ring-2",
+                i >= 6 ? "hidden 2xl:block" : i >= 4 && "hidden xl:block",
+              )}
               onClick={() => view(c.thumbIds, i, c.alias || c.convId)}
             >
               <img
                 src={api.thumbUrl(id)}
                 loading="lazy"
                 alt=""
-                className="bg-muted size-10 rounded object-cover transition hover:brightness-90 2xl:size-12"
+                className="bg-muted size-10 max-w-none rounded object-cover transition hover:brightness-90 2xl:size-12"
                 onError={(e) => (e.currentTarget.style.visibility = "hidden")}
               />
             </button>
           ))}
         </div>
       </TableCell>
-      <TableCell>
+      <TableCell className="min-w-44">
         <div className="flex flex-col gap-0.5">
           {c.recentDocs.map((d) => (
             <button
@@ -569,7 +572,7 @@ function Row({
               type="button"
               onClick={() => openDoc(d.id)}
               title={`Mở ${d.name ?? docLabel(d.kind)} · ${docLabel(d.kind)} · ${formatBytes(d.size)} · ${formatDate(d.ts)}`}
-              className="hover:bg-muted flex max-w-72 items-center gap-1.5 rounded px-1 text-left text-xs"
+              className="hover:bg-muted flex max-w-64 items-center gap-1.5 rounded px-1 text-left text-xs"
             >
               <FileText className={cn("size-3.5 shrink-0", docColor(d.kind))} />
               {d.name ? (

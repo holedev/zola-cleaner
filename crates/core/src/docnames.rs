@@ -278,6 +278,12 @@ pub fn clean_title(raw: &str) -> Option<String> {
             t = rest.trim().to_owned();
         }
     }
+    // Tiêu đề là đường dẫn file ("F:\DU LIEU\2026\Hợp đồng.pdf") → chỉ giữ tên file
+    if let Some(name) = t.rsplit(['\\', '/']).next()
+        && name.len() < t.len()
+    {
+        t = name.trim().to_owned();
+    }
     let lower = t.to_lowercase();
     let generic = [
         "untitled",
@@ -294,6 +300,9 @@ pub fn clean_title(raw: &str) -> Option<String> {
         "microsoft word",
         "word document",
         "new document",
+        "untitled document",
+        "untitled spreadsheet",
+        "untitled presentation",
     ];
     let numbered = [
         "document",
@@ -507,6 +516,11 @@ mod tests {
     #[test]
     fn loc_tieu_de_vo_nghia() {
         assert_eq!(
+            clean_title(r"F:\DU LIEU\2026\2-Truong Dai Hoc.pdf").as_deref(),
+            Some("2-Truong Dai Hoc.pdf")
+        );
+        assert_eq!(clean_title("C:/temp/").as_deref(), None);
+        assert_eq!(
             clean_title("Microsoft Word - Báo cáo tháng 9.docx").as_deref(),
             Some("Báo cáo tháng 9.docx")
         );
@@ -518,6 +532,7 @@ mod tests {
             "ab",
             "Book 2",
             "Print",
+            "Untitled Spreadsheet",
             "</rdf:Alt> </dc:title>",
         ] {
             assert_eq!(clean_title(junk), None, "{junk}");
