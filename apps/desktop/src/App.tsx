@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
 import { CleanupDialog, type CleanupRequest } from "@/components/cleanup-dialog";
-import { ZaloBanner } from "@/components/zalo-banner";
+import { ZaloBanner, ZaloStuckBanner } from "@/components/zalo-banner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -197,7 +197,7 @@ export default function App() {
         </header>
       )}
 
-      {health.data?.zaloRunning && <ZaloBanner />}
+      {health.data?.zaloRunning ? <ZaloBanner /> : health.data?.zaloStuck ? <ZaloStuckBanner count={health.data.zaloStuck} /> : null}
       {root && root.layout.status === "unsupported" && (
         <Alert>
           <Eye />

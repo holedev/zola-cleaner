@@ -68,7 +68,8 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [group, setGroup] = useState<ItemGroup>("media");
   const [order, setOrder] = useState<ItemOrder>("largest");
-  const zaloRunning = !!health.data?.zaloRunning;
+  // Tiến trình Zalo bị treo vẫn có thể giữ file → chặn như khi Zalo đang chạy
+  const zaloRunning = !!health.data?.zaloRunning || !!health.data?.zaloStuck;
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings, enabled: request != null });
   const trash = settings.data?.trash.find((t) => t.rootId === request?.filter.rootId);
 

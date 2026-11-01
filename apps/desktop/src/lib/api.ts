@@ -45,6 +45,8 @@ export interface ScanProgress {
 export interface Health {
   version: string;
   zaloRunning: boolean;
+  /** Số tiến trình Zalo bị treo: Zalo chính đã thoát nhưng tiến trình con còn sót lại. */
+  zaloStuck: number;
   scanning: ScanProgress[];
   busy: boolean;
 }
@@ -248,6 +250,7 @@ export const api = {
   conversationMonths: (filter: CleanupFilter) => call<ConversationMonths>("conversation_months", { filter }),
   setAlias: (rootId: number, convId: string, alias: string | null) =>
     call<void>("set_alias", { rootId, convId, alias }),
+  endStuckZalo: () => call<number>("end_stuck_zalo"),
   preview: (filter: CleanupFilter) => call<CleanupPreview>("preview", { filter }),
   docKinds: (filter: CleanupFilter) => call<KindBucket[]>("doc_kinds", { filter }),
   quarantine: (filter: CleanupFilter) => call<JobResult>("quarantine", { filter }),

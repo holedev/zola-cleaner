@@ -156,7 +156,10 @@ async fn exclusive<T: Send + 'static>(
 #[serde(rename_all = "camelCase")]
 struct Health {
     version: &'static str,
+    /// Zalo chính đang chạy.
     zalo_running: bool,
+    /// Số tiến trình Zalo bị treo (Zalo chính đã thoát nhưng tiến trình con còn sót).
+    zalo_stuck: usize,
     scanning: Vec<ScanProgressFor>,
     busy: bool,
 }
@@ -171,11 +174,12 @@ struct ScanProgressFor {
 
 #[tauri::command]
 async fn health(state: AppStateRef<'_>) -> CmdResult<Health> {
-    let zalo_running = blocking(|| Ok(safety::is_zalo_running())).await?;
+    let zalo = blocking(|| Ok(safety::zalo_processes())).await?;
     let rt = state.rt.lock().unwrap();
     Ok(Health {
         version: env!("CARGO_PKG_VERSION"),
-        zalo_running,
+        zalo_running: zalo.main,
+        zalo_stuck: zalo.stuck.len(),
         scanning: rt
             .scanning
             .iter()
@@ -186,6 +190,14 @@ async fn health(state: AppStateRef<'_>) -> CmdResult<Health> {
             .collect(),
         busy: rt.busy,
     })
+}
+
+/// Kết thúc các tiến trình Zalo bị treo — chỉ khi người dùng bấm, và không bao giờ đụng Zalo đang chạy thật.
+#[tauri::command]
+async fn end_stuck_zalo() -> CmdResult<usize> {
+    let n = blocking(|| Ok(safety::end_stuck_zalo())).await?;
+    log::info!("Kết thúc {n} tiến trình Zalo bị treo");
+    Ok(n)
 }
 
 #[tauri::command]
@@ -1100,6 +1112,7 @@ pub fn run() {
             set_alias,
             preview,
             doc_kinds,
+            end_stuck_zalo,
             cleanup_items,
             quarantine,
             jobs,
