@@ -78,5 +78,11 @@ Xoá vĩnh viễn các Media Item của một Quarantine Job. Chỉ lúc này du
 Trên giao diện: "Xoá vĩnh viễn" (một job) và "Dọn sạch thùng rác" (mọi job).
 _Avoid_: delete, giải phóng
 
+**Backup**:
+File ZIP gom các Media Item của một hoặc nhiều Quarantine Job, kèm bản kê mọi Link của chúng — để người dùng cất ở nơi khác
+(Drive, USB) trước khi Purge. Nhập lại một Backup = đặt Media Item về đúng mọi Link, như Restore; chỉ vào đúng Account đã sao lưu.
+Trên giao diện: "Nén ZIP để sao lưu" / "Nhập lại từ ZIP".
+_Avoid_: export, archive (archive là Media Kind "file nén")
+
 **Retention**:
 Số ngày một Quarantine Job được giữ trước khi tự Purge (mặc định 7 ngày). Chỉ được thực thi khi app được mở; app không chạy nền.

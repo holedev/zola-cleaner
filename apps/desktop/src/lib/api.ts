@@ -155,6 +155,24 @@ export interface Job {
   expiresAt: number;
   itemCount: number;
   totalBytes: number;
+  /** File ZIP sao lưu gần nhất (nếu đã nén). */
+  archivePath: string | null;
+}
+
+export interface DiskInfo {
+  /** Ổ chứa dữ liệu Zalo, ví dụ "C:". */
+  drive: string;
+  free: number;
+  total: number;
+  zaloBytes: number;
+  trashBytes: number;
+}
+
+export interface ArchiveResult {
+  files: number;
+  bytes: number;
+  skipped: number;
+  failed: number;
 }
 
 export interface JobResult {
@@ -205,6 +223,9 @@ export const api = {
   viewUrl: (itemId: number) => convertFileSrc(String(itemId), "media"),
   /** Mở bằng ứng dụng mặc định của Windows (qua một bản tạm, tài liệu fileNoise được giải mã). */
   openItem: (itemId: number) => call<void>("open_item", { itemId }),
+  diskSpace: (rootId: number) => call<DiskInfo>("disk_space", { rootId }),
+  exportBackup: (jobIds: number[], path: string) => call<ArchiveResult>("export_backup", { jobIds, path }),
+  importBackup: (rootId: number, path: string) => call<ArchiveResult>("import_backup", { rootId, path }),
 };
 
 export function formatBytes(n: number): string {

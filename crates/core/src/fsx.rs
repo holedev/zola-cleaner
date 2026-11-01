@@ -159,6 +159,31 @@ mod imp {
     }
 }
 
+/// Dung lượng ổ chứa `path`: (còn trống cho người dùng hiện tại, tổng), byte.
+#[cfg(windows)]
+pub fn disk_space(path: &Path) -> io::Result<(u64, u64)> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let (mut free, mut total, mut _all_free) = (0u64, 0u64, 0u64);
+    if unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut free, &mut total, &mut _all_free) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok((free, total))
+}
+
+#[cfg(not(windows))]
+pub fn disk_space(_path: &Path) -> io::Result<(u64, u64)> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "chỉ hỗ trợ Windows",
+    ))
+}
+
 /// Key Media Item và số Link (nlink) của một đường dẫn.
 pub fn file_key(path: &Path) -> io::Result<(String, u32)> {
     imp::file_key(path)

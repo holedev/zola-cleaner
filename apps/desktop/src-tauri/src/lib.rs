@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::http::{Response, StatusCode};
 use tauri::{AppHandle, Emitter, Manager, State};
+use zc_core::archive::{self, ArchiveResult};
 use zc_core::db::{self, Root};
 use zc_core::filter::CleanupFilter;
 use zc_core::layout::{self, LayoutCheck};
@@ -15,7 +16,7 @@ use zc_core::quarantine::{self, CleanupItems, CleanupPreview, Job, JobOptions, J
 use zc_core::scan::{ScanOptions, ScanProgress};
 use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
 use zc_core::suggest::{self, Suggestion};
-use zc_core::{Error, report, safety, thumbs};
+use zc_core::{Error, fsx, report, safety, thumbs};
 
 /// Lỗi trả về giao diện: `kind` để giao diện chọn cách hiển thị, `message` hiển thị thẳng.
 #[derive(Debug, Serialize)]
@@ -438,6 +439,120 @@ async fn purge(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
     .await
 }
 
+// --- Ổ đĩa, sao lưu ---
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiskInfo {
+    /// Ổ chứa dữ liệu Zalo, ví dụ "C:".
+    drive: String,
+    free: u64,
+    total: u64,
+    /// Media Zalo đang chiếm (không đếm trùng hardlink).
+    zalo_bytes: i64,
+    /// Thùng rác của app đang giữ (vẫn chiếm ổ đĩa).
+    trash_bytes: i64,
+}
+
+#[tauri::command]
+async fn disk_space(state: AppStateRef<'_>, root_id: i64) -> CmdResult<DiskInfo> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let db = s.db()?;
+        let root = db::get_root(&db, root_id)?.ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
+        let path = PathBuf::from(&root.path);
+        let (free, total) = fsx::disk_space(&path).map_err(|e| CmdError::new("internal", e.to_string()))?;
+        let zalo_bytes = stats::get_stats(&db, root_id, 0)?.total.bytes;
+        let trash_bytes: i64 = db
+            .query_row(
+                "SELECT COALESCE(SUM(total_bytes), 0) FROM jobs WHERE root_id = ? AND status IN ('quarantined', 'failed')",
+                [root_id],
+                |r| r.get(0),
+            )
+            .map_err(Error::from)?;
+        let drive = path.components().next().map(|c| c.as_os_str().to_string_lossy().into_owned()).unwrap_or_default();
+        Ok(DiskInfo { drive, free, total, zalo_bytes, trash_bytes })
+    })
+    .await
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArchiveProgress {
+    done: u64,
+    total: u64,
+}
+
+/// Nén các lần dọn trong thùng rác thành ZIP (để sao lưu lên Drive…). Kiểm tra nơi lưu đủ chỗ trước.
+#[tauri::command]
+async fn export_backup(
+    app: AppHandle,
+    state: AppStateRef<'_>,
+    job_ids: Vec<i64>,
+    path: String,
+) -> CmdResult<ArchiveResult> {
+    exclusive(state.inner(), move |s| {
+        let db = s.db()?;
+        let need: i64 = job_ids
+            .iter()
+            .map(|id| db.query_row("SELECT total_bytes FROM jobs WHERE id = ?", [id], |r| r.get::<_, i64>(0)).unwrap_or(0))
+            .sum();
+        let out = PathBuf::from(&path);
+        if let Some((free, _)) = out.parent().and_then(|d| fsx::disk_space(d).ok())
+            && free < (need as u64).saturating_add(need as u64 / 50 + 16 * 1024 * 1024)
+        {
+            return Err(CmdError::new(
+                "user",
+                format!(
+                    "Nơi lưu không đủ chỗ: cần khoảng {}, còn trống {}. Hãy chọn ổ đĩa khác (USB, ổ D…).",
+                    zc_core::format_bytes(need as u64),
+                    zc_core::format_bytes(free)
+                ),
+            ));
+        }
+        let progress = |done, total| {
+            let _ = app.emit("archive-progress", ArchiveProgress { done, total });
+        };
+        let r = archive::export_jobs(&db, &job_ids, &out, &progress)?;
+        log::info!("Nén thùng rác: {} file, {} byte, {} lỗi", r.files, r.bytes, r.failed);
+        Ok(r)
+    })
+    .await
+}
+
+/// Nhập lại một bản sao lưu ZIP vào tài khoản đang xem. Cần thoát Zalo.
+#[tauri::command]
+async fn import_backup(
+    app: AppHandle,
+    state: AppStateRef<'_>,
+    root_id: i64,
+    path: String,
+) -> CmdResult<ArchiveResult> {
+    exclusive(state.inner(), move |s| {
+        let db = s.db()?;
+        let work = s.paths.quarantine.join(format!("import-{}", db::now_ms()));
+        let progress = |done, total| {
+            let _ = app.emit("archive-progress", ArchiveProgress { done, total });
+        };
+        let r = archive::import_backup(
+            &db,
+            root_id,
+            Path::new(&path),
+            &work,
+            &s.job_options(),
+            &progress,
+        )?;
+        log::info!(
+            "Nhập lại sao lưu: {} file, {} bỏ qua, {} lỗi",
+            r.files,
+            r.skipped,
+            r.failed
+        );
+        Ok(r)
+    })
+    .await
+}
+
 /// Mở một Media Item bằng ứng dụng mặc định của Windows (PDF, Word, ảnh…), qua một bản tạm.
 #[tauri::command]
 async fn open_item(app: AppHandle, state: AppStateRef<'_>, item_id: i64) -> CmdResult<()> {
@@ -676,6 +791,9 @@ pub fn run() {
             export_report,
             export_log,
             open_item,
+            disk_space,
+            export_backup,
+            import_backup,
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được Zola Cleaner");

@@ -124,8 +124,22 @@ pub fn open_db(file: &Path) -> Result<Db> {
         )?;
     }
     db.execute_batch(SCHEMA)?;
+    // Cột thêm sau, không đổi SCHEMA_VERSION (đổi version sẽ xoá bảng jobs — mất thùng rác của người dùng)
+    add_column_if_missing(&db, "jobs", "archive_path", "TEXT")?;
     db.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
     Ok(db)
+}
+
+fn add_column_if_missing(db: &Db, table: &str, column: &str, decl: &str) -> Result<()> {
+    let exists: bool = db.query_row(
+        &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?"),
+        [column],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"))?;
+    }
+    Ok(())
 }
 
 /// Mở thêm một kết nối tới CSDL đã được [`open_db`] tạo. Nhờ WAL, đọc được trong lúc một kết nối khác đang ghi (quét).

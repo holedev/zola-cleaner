@@ -1,5 +1,6 @@
 //! Lõi Zola Cleaner. Thuật ngữ: xem `CONTEXT.md`; cấu trúc dữ liệu Zalo: `docs/zalo-layout.md`.
 
+pub mod archive;
 pub mod db;
 pub mod detect;
 pub mod error;

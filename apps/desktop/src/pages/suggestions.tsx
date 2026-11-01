@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
+import { DiskCard } from "@/components/disk-card";
 import { CATEGORY_LABEL, formatBytes } from "@/lib/api";
 import { useStats, useSuggestions } from "@/lib/queries";
 
@@ -21,6 +22,7 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup }: Props) {
 
   return (
     <div className="grid gap-6">
+      <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
@@ -42,6 +44,8 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup }: Props) {
               ))}
         </CardContent>
       </Card>
+      <DiskCard rootId={rootId} />
+      </div>
 
       <div>
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">

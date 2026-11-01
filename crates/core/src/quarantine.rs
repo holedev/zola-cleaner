@@ -81,6 +81,8 @@ pub struct Job {
     pub item_count: i64,
     pub total_bytes: i64,
     pub quarantine_dir: String,
+    /// File ZIP sao lưu gần nhất của job (nếu đã nén).
+    pub archive_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -94,9 +96,9 @@ pub struct JobResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct StoredLink {
-    rel_path: String,
-    conv_id: Option<String>,
+pub(crate) struct StoredLink {
+    pub(crate) rel_path: String,
+    pub(crate) conv_id: Option<String>,
 }
 
 /// `%APPDATA%\zola-cleaner\quarantine` — cùng ổ với ZaloData, nằm ngoài ZaloData.
@@ -104,7 +106,7 @@ pub fn default_quarantine_base(app_data: &Path) -> PathBuf {
     app_data.join("zola-cleaner").join("quarantine")
 }
 
-fn abs_of(root: &Path, rel_path: &str) -> PathBuf {
+pub(crate) fn abs_of(root: &Path, rel_path: &str) -> PathBuf {
     rel_path
         .split('/')
         .fold(root.to_path_buf(), |p, part| p.join(part))
@@ -199,7 +201,7 @@ pub fn preview_cleanup(
 }
 
 /// Ổ đĩa của một đường dẫn (`c:\`), để kiểm tra rename không phải chép qua ổ khác.
-fn drive_of(p: &Path) -> String {
+pub(crate) fn drive_of(p: &Path) -> String {
     p.components()
         .next()
         .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
@@ -215,7 +217,11 @@ fn order_links(mut links: Vec<StoredLink>) -> Vec<StoredLink> {
 /// Đưa một Media Item về đủ mọi Link ban đầu. Idempotent: chạy lại sau khi bị ngắt giữa chừng vẫn đúng.
 /// Trong lúc cách ly, Zalo có thể đã tải lại đúng ảnh đó (từ Cloud) vào một Link cũ — file mới, nlink 1.
 /// Cùng nội dung → thay bằng Link tới bản gốc (không để hai bản). Khác nội dung → giữ file của Zalo.
-fn restore_links(root: &Path, links: &[StoredLink], quarantine_path: &Path) -> Result<()> {
+pub(crate) fn restore_links(
+    root: &Path,
+    links: &[StoredLink],
+    quarantine_path: &Path,
+) -> Result<()> {
     let mut paths = links.iter().map(|l| abs_of(root, &l.rel_path));
     let Some(primary) = paths.next() else {
         return Ok(());
@@ -256,7 +262,7 @@ fn restore_links(root: &Path, links: &[StoredLink], quarantine_path: &Path) -> R
     Ok(())
 }
 
-fn assert_zalo_closed(opts: &JobOptions) -> Result<()> {
+pub(crate) fn assert_zalo_closed(opts: &JobOptions) -> Result<()> {
     if opts.check_zalo && is_zalo_running() {
         Err(Error::ZaloRunning)
     } else {
@@ -452,6 +458,7 @@ fn job_row(r: &rusqlite::Row) -> rusqlite::Result<Job> {
         item_count: r.get("item_count")?,
         total_bytes: r.get("total_bytes")?,
         quarantine_dir: r.get("quarantine_dir")?,
+        archive_path: r.get("archive_path")?,
     })
 }
 

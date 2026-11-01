@@ -717,3 +717,72 @@ fn xem_truoc_tung_file_va_bo_tick() {
     assert_eq!(q.bytes, 100 + 200 + 50 + 800);
     assert!(s.v.exists());
 }
+
+#[test]
+fn nen_zip_thung_rac_roi_nhap_lai() {
+    use zc_core::archive::{export_jobs, import_backup};
+    let s = setup();
+    let a_bytes = fs::read(&s.a).unwrap();
+    let q = quarantine(&s.db, &s.filter(&["111"]), &s.opts()).unwrap();
+    assert_eq!(q.moved, 1);
+
+    let zip = s.store.parent().unwrap().join("backup.zip");
+    let r = export_jobs(&s.db, &[q.job_id], &zip, &|_, _| {}).unwrap();
+    assert_eq!((r.files, r.bytes), (1, 100));
+    let job: Option<String> =
+        s.db.query_row(
+            "SELECT archive_path FROM jobs WHERE id = ?",
+            [q.job_id],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(job.as_deref(), Some(zip.to_string_lossy().as_ref()));
+
+    // Giải phóng ổ đĩa, sau đó nhập lại từ bản sao lưu
+    purge_job(&s.db, q.job_id).unwrap();
+    assert!(!s.a.exists() && !s.a_res.exists());
+    let work = s.store.parent().unwrap().join("import");
+    let r = import_backup(&s.db, s.root_id, &zip, &work, &s.opts(), &|_, _| {}).unwrap();
+    assert_eq!((r.files, r.failed), (1, 0));
+    assert_eq!(fs::read(&s.a).unwrap(), a_bytes);
+    assert_eq!(key(&s.a_res), key(&s.a)); // đủ cả Link trong resource/
+    assert_eq!(nlink(&s.a), 2);
+
+    // Nhập lần nữa: đã có đủ → bỏ qua, không tạo bản trùng
+    let again = import_backup(&s.db, s.root_id, &zip, &work, &s.opts(), &|_, _| {}).unwrap();
+    assert_eq!((again.files, again.skipped), (0, 1));
+    s.rescan();
+    assert_eq!(s.total_bytes(), 1560);
+}
+
+#[test]
+fn tu_choi_zip_co_duong_dan_ra_ngoai() {
+    use std::io::Write;
+    use zc_core::archive::import_backup;
+    let s = setup();
+    let zip_path = s.store.parent().unwrap().join("evil.zip");
+    let mut zip = zip::ZipWriter::new(fs::File::create(&zip_path).unwrap());
+    let opts = zip::write::SimpleFileOptions::default();
+    zip.start_file("files/1", opts).unwrap();
+    zip.write_all(b"x").unwrap();
+    zip.start_file("manifest.json", opts).unwrap();
+    zip.write_all(
+        br#"{"format":"zola-cleaner-backup","version":1,"createdAt":0,"accountUid":null,"jobIds":[1],
+            "items":[{"itemId":1,"size":1,"category":"image","kind":"jpg","msgTs":null,
+            "links":[{"relPath":"../../evil.txt","convId":null}],"file":"files/1"}]}"#,
+    )
+    .unwrap();
+    zip.finish().unwrap();
+    let work = s.store.parent().unwrap().join("import");
+    let err = import_backup(&s.db, s.root_id, &zip_path, &work, &s.opts(), &|_, _| {}).unwrap_err();
+    assert!(err.to_string().contains("không hợp lệ"), "{err}");
+    assert!(
+        !s.store
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("evil.txt")
+            .exists()
+    );
+}

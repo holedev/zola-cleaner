@@ -1,7 +1,11 @@
-import { Archive, RotateCcw, Trash2 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { Archive, CircleCheck, FileArchive, FolderOpen, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
+import { DiskCard } from "@/components/disk-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,7 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, errorMessage, formatBytes, formatDate, type Job, type JobStatus } from "@/lib/api";
+import { api, type ArchiveResult, errorMessage, formatBytes, formatDate, type Job, type JobStatus } from "@/lib/api";
 import { useHealth, useInvalidateIndex, useJobs } from "@/lib/queries";
 
 const STATUS: Record<JobStatus, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -36,6 +40,8 @@ export function JobsPage({ rootId }: { rootId: number }) {
   const blocking = useBlocking();
   const invalidate = useInvalidateIndex();
   const [confirmPurge, setConfirmPurge] = useState<Job[] | null>(null);
+  /** Vừa nén ZIP xong: gợi ý mở thư mục / xoá vĩnh viễn để lấy lại dung lượng. */
+  const [exported, setExported] = useState<{ path: string; result: ArchiveResult; jobs: Job[] } | null>(null);
   const zaloRunning = !!health.data?.zaloRunning;
 
   const active = (jobs.data ?? []).filter(isActive);
@@ -61,6 +67,58 @@ export function JobsPage({ rootId }: { rootId: number }) {
     await invalidate();
   };
 
+  /** Chạy thao tác dài có tiến độ (event archive-progress từ Rust). */
+  const withProgress = async <T,>(title: string, fn: () => Promise<T>): Promise<T> => {
+    const unlisten = await listen<{ done: number; total: number }>("archive-progress", (e) => {
+      const { done, total } = e.payload;
+      blocking.set({ title, detail: `${formatBytes(done)} / ${formatBytes(total)}`, percent: total ? (done / total) * 100 : undefined });
+    });
+    try {
+      return await blocking.run(title, fn, "Có thể mất vài phút với thùng rác lớn. Đừng tắt app.");
+    } finally {
+      unlisten();
+    }
+  };
+
+  const exportZip = async (list: Job[]) => {
+    const day = new Date().toISOString().slice(0, 10);
+    const path = await save({
+      title: "Lưu bản sao lưu (ZIP)",
+      defaultPath: `zola-cleaner-sao-luu-${day}.zip`,
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    });
+    if (!path) return;
+    try {
+      const result = await withProgress("Đang nén ZIP…", () =>
+        api.exportBackup(
+          list.map((j) => j.id),
+          path,
+        ),
+      );
+      setExported({ path, result, jobs: list });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+    await invalidate();
+  };
+
+  const importZip = async () => {
+    const path = await open({ title: "Chọn bản sao lưu (ZIP) của Zola Cleaner", filters: [{ name: "ZIP", extensions: ["zip"] }] });
+    if (typeof path !== "string") return;
+    try {
+      const r = await withProgress("Đang nhập lại từ ZIP…", () => api.importBackup(rootId, path));
+      toast.success(
+        `Đã đưa ${r.files.toLocaleString("vi-VN")} file (${formatBytes(r.bytes)}) về lại Zalo` +
+          (r.skipped ? ` · ${r.skipped} file đã có sẵn` : "") +
+          (r.failed ? ` · ${r.failed} file lỗi` : ""),
+      );
+      await api.startScan(rootId); // cập nhật chỉ mục; tiến độ quét hiện ở hộp thoại chung
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+    await invalidate();
+  };
+
   const restore = async (j: Job) => {
     try {
       const r = await blocking.run("Đang khôi phục…", () => api.restore(j.id), "Đang trả file về chỗ cũ. Đừng mở Zalo lúc này.");
@@ -74,6 +132,7 @@ export function JobsPage({ rootId }: { rootId: number }) {
 
   return (
     <div className="grid gap-6">
+      <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
@@ -84,17 +143,38 @@ export function JobsPage({ rootId }: { rootId: number }) {
           ) : (
             <CardTitle className="text-4xl font-semibold tabular-nums">{formatBytes(holding)}</CardTitle>
           )}
-          <CardAction>
+          <CardAction className="flex flex-col items-end gap-2">
             <Button size="lg" disabled={active.length === 0} onClick={() => setConfirmPurge(active)}>
               <Trash2 /> Dọn sạch thùng rác
+            </Button>
+            <Button
+              variant="outline"
+              disabled={active.length === 0}
+              onClick={() => exportZip(active)}
+              title="Gom mọi file trong thùng rác vào một file ZIP để tải lên Drive, USB… trước khi xoá vĩnh viễn"
+            >
+              <FileArchive /> Nén ZIP để sao lưu
             </Button>
           </CardAction>
           <CardDescription className="text-xs">
             Đây là thùng rác riêng của Zola Cleaner, không phải Thùng rác của Windows. Muốn lấy lại file thì bấm Khôi phục ở
             đây — app sẽ trả file về đúng mọi chỗ Zalo cần.
           </CardDescription>
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={zaloRunning}
+              title={zaloRunning ? "Hãy thoát hẳn Zalo trước" : "Đưa file từ một bản sao lưu ZIP về lại Zalo"}
+              onClick={importZip}
+            >
+              <Upload /> Nhập lại từ ZIP…
+            </Button>
+          </div>
         </CardHeader>
       </Card>
+      <DiskCard rootId={rootId} />
+      </div>
 
       {jobs.isPending ? (
         <Skeleton className="h-40 rounded-xl" />
@@ -122,7 +202,14 @@ export function JobsPage({ rootId }: { rootId: number }) {
                   <TableCell className="text-right tabular-nums">{j.itemCount.toLocaleString("vi-VN")}</TableCell>
                   <TableCell className="text-right tabular-nums">{formatBytes(j.totalBytes)}</TableCell>
                   <TableCell>
-                    <Badge variant={STATUS[j.status].variant}>{STATUS[j.status].label}</Badge>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant={STATUS[j.status].variant}>{STATUS[j.status].label}</Badge>
+                      {j.archivePath && (
+                        <Badge variant="outline" title={`Đã nén: ${j.archivePath}`}>
+                          <FileArchive /> Đã nén ZIP
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{j.status === "quarantined" ? formatDate(j.expiresAt) : "—"}</TableCell>
                   <TableCell className="text-right">
@@ -137,6 +224,9 @@ export function JobsPage({ rootId }: { rootId: number }) {
                         >
                           <RotateCcw /> Khôi phục
                         </Button>
+                        <Button variant="outline" size="sm" onClick={() => exportZip([j])} title="Nén lần dọn này thành ZIP">
+                          <FileArchive /> Nén ZIP
+                        </Button>
                         <Button variant="destructive" size="sm" onClick={() => setConfirmPurge([j])}>
                           <Trash2 /> Xoá vĩnh viễn
                         </Button>
@@ -149,6 +239,51 @@ export function JobsPage({ rootId }: { rootId: number }) {
           </Table>
         </div>
       )}
+
+      <AlertDialog open={exported != null} onOpenChange={(o) => !o && setExported(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <CircleCheck className="size-5 text-emerald-600" />
+              Đã nén {exported && formatBytes(exported.result.bytes)} thành ZIP
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="grid gap-2">
+                <p className="text-foreground font-mono text-xs break-all">{exported?.path}</p>
+                {exported && exported.result.failed > 0 && (
+                  <p className="text-destructive">{exported.result.failed} file không đọc được nên không có trong ZIP.</p>
+                )}
+                <ol className="list-decimal space-y-1 pl-5">
+                  <li>Tải file ZIP lên Google Drive, OneDrive hoặc chép sang USB / ổ khác.</li>
+                  <li>
+                    Bấm <b>Xoá vĩnh viễn</b> để lấy lại dung lượng trên ổ này.
+                  </li>
+                  <li>
+                    Cần lại thì vào đây bấm <b>Nhập lại từ ZIP…</b> — file về đúng chỗ trong Zalo.
+                  </li>
+                </ol>
+                <p className="text-xs">Ảnh và video vốn đã nén sẵn nên file ZIP gần bằng dung lượng gốc.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <Button variant="ghost" onClick={() => exported && void revealItemInDir(exported.path)}>
+              <FolderOpen /> Mở thư mục
+            </Button>
+            <AlertDialogCancel>Để sau</AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              onClick={() => {
+                const list = exported?.jobs ?? [];
+                setExported(null);
+                setConfirmPurge(list);
+              }}
+            >
+              Xoá vĩnh viễn
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmPurge != null} onOpenChange={(o) => !o && setConfirmPurge(null)}>
         <AlertDialogContent>
