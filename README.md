@@ -1,57 +1,81 @@
-# Zola Cleaner
+<p align="center">
+  <img src="apps/desktop/app-icon.png" width="96" alt="" />
+</p>
 
-Web app chạy local để **dọn ảnh, video, tài liệu** mà Zalo PC tự tải về máy (`%APPDATA%\ZaloData\media\<uid>\ZaloDownloads`), **chọn theo hội thoại** và tuổi.
+<h1 align="center">Zola Cleaner</h1>
 
-- Nhận diện loại file **theo nội dung** (magic bytes; tài liệu trong `fileNoise` được giải XOR), xem được cả ảnh JPEG XL
-- Hiểu **hardlink** của Zalo: dung lượng không đếm trùng, dọn một file là gỡ mọi đường dẫn của nó
-- Danh sách hội thoại xếp theo dung lượng, kèm ảnh gần đây và tên tự đặt
-- Dọn dẹp an toàn: xem trước → cách ly (giữ 7 ngày) → khôi phục / xoá vĩnh viễn
+<p align="center">
+  Dọn ảnh, video, tài liệu mà <b>Zalo PC</b> tự tải về máy — chọn theo hội thoại và thời gian, xem trước từng file, khôi phục được.
+  <br />
+  <sub>Desktop app (Windows) that frees disk space taken by media Zalo PC downloads. Vietnamese UI.</sub>
+</p>
 
-📄 Kế hoạch: [`docs/PLAN.md`](docs/PLAN.md) · Thuật ngữ: [`CONTEXT.md`](CONTEXT.md) · Cấu trúc dữ liệu Zalo: [`docs/zalo-layout.md`](docs/zalo-layout.md)
+---
 
-## Yêu cầu
+Zalo PC lưu mọi ảnh, video, tài liệu nhận qua chat vào ổ C, thường lên tới hàng chục GB. Zalo không có cách dọn theo hội thoại hay theo thời gian, nên ổ đĩa cứ đầy dần.
 
-- Node.js **≥ 22.13** (dùng `node:sqlite` có sẵn, không cần build native)
-- pnpm 10 (`corepack enable`)
+Zola Cleaner cho bạn thấy Zalo đang giữ bao nhiêu, ở hội thoại nào, và dọn đúng phần bạn chọn.
 
-## Bắt đầu
+## Tính năng
+
+- **Dọn nhanh**: một câu cho biết Zalo đang chiếm bao nhiêu và dọn được bao nhiêu, ví dụ "Ảnh & video cũ hơn 1 năm → lấy lại 4,4 GB".
+- **Theo hội thoại**: chọn từng hội thoại hoặc nhóm, lọc theo loại (ảnh, video, tài liệu, file nén…), theo tuổi, theo kích thước, theo định dạng (ZIP, RAR, PDF…), hoặc "từ tháng này trở về trước".
+- **Xem trước từng file**: ảnh hiện thành lưới, tài liệu kèm tên thật. Bỏ tick file nào thì file đó được giữ lại.
+- **Thùng rác riêng**: file đã dọn được giữ 7 ngày và khôi phục đúng chỗ cũ. Có thể nén ZIP để cất lên Drive / USB rồi nhập lại sau.
+- **An toàn với cách Zalo lưu file**: một file có thể nằm ở nhiều hội thoại (hardlink). App không đếm trùng và không dọn file còn dùng ở hội thoại bạn không chọn.
+- Nhận ra dữ liệu Zalo đã chuyển sang ổ khác, và hỗ trợ nhiều tài khoản Zalo trên cùng máy.
+
+## Cài đặt
+
+1. Tải file `Zola.Cleaner_x.y.z_x64-setup.exe` ở trang [**Releases**](../../releases/latest).
+2. Mở file cài. Cài theo người dùng hiện tại, không cần quyền quản trị.
+3. App **chưa được ký số**, nên Windows có thể hiện "Windows protected your PC". Bấm **More info → Run anyway**.
+
+App tự báo khi có bản mới. Bấm **Cập nhật** là tải và cài.
+
+> Yêu cầu: Windows 10/11 64-bit, Zalo PC bản mới (đã chuyển sang cách lưu media mới của Zalo 5.x).
+> Nếu cấu trúc thư mục Zalo trên máy bạn khác với cấu trúc app đã kiểm chứng, app chỉ cho **xem**, không dọn.
+
+## Dùng thế nào cho an toàn
+
+- **Thoát hẳn Zalo trước khi dọn**: chuột phải biểu tượng Zalo ở khay hệ thống → Thoát. App sẽ nhắc nếu Zalo còn chạy.
+- Ảnh và video đã dọn: Zalo thường tải lại được khi bạn mở hội thoại, nếu file còn trên máy chủ Zalo.
+- **Tài liệu không bao giờ được chọn sẵn**. Không có zCloud thì file chỉ nằm trên máy chủ Zalo một số ngày. Tài liệu đã dọn có thể không tải lại được nữa.
+- Không dùng zCloud? Bật **Cài đặt → Tin nhắn → Cài đặt khác → Tự động tải trước Ảnh/File/Video/Tin nhắn thoại dưới 30MB** trong Zalo PC để file về máy trước khi hết hạn.
+- Ổ đĩa chỉ thật sự trống ra khi bạn **Dọn sạch thùng rác**, hoặc sau 7 ngày.
+
+## Quyền riêng tư
+
+- App chỉ đọc thư mục media của Zalo (`ZaloDownloads`). App **không đọc tin nhắn**, không đọc CSDL của Zalo, và không điều khiển Zalo.
+- Không có telemetry. Kết nối mạng duy nhất là hỏi GitHub xem có bản mới không.
+- Nhật ký và báo cáo cấu trúc chỉ được lưu vào file bạn chọn, và đã lược bỏ ID tài khoản, ID hội thoại.
+
+## Phát triển
+
+Cần: Windows, [Rust](https://rustup.rs) ≥ 1.95 (MSVC, kèm Visual Studio Build Tools), Node.js ≥ 22, pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install
-
-# Khảo sát nhanh bằng CLI (chỉ đọc, không xoá gì) — tự tìm thư mục ZaloDownloads
-pnpm scan
-
-# Chạy web app: API http://127.0.0.1:5174, UI http://127.0.0.1:5173
-pnpm dev
+pnpm dev                     # chạy app ở chế độ dev (Tauri + Vite)
+cargo test --workspace       # test lõi trên Media Store giả có hardlink thật
+cargo clippy --workspace --all-targets
+pnpm typecheck
+pnpm build                   # file cài NSIS trong target/release/bundle/nsis
 ```
 
-> Quét ~35 nghìn file / 15 GB mất vài giây. Các lần sau chỉ đọc lại file mới/thay đổi.
-
-## Cấu trúc
-
 ```
-packages/core   Logic: layout, detect, scan, db, stats, thumbs/jxl, safety, quarantine
-apps/server     Hono API (chỉ lắng nghe 127.0.0.1)
-apps/web        Vite + React UI
-docs/           Kế hoạch, cấu trúc dữ liệu Zalo, ADR
-CONTEXT.md      Thuật ngữ
+crates/core      Lõi Rust: nhận diện layout Zalo, quét, phân loại, thống kê, thùng rác, ZIP, tên tài liệu
+apps/desktop     App Tauri v2: src-tauri (command IPC) + src (React, Tailwind, shadcn/ui)
+docs/            Kế hoạch, cấu trúc dữ liệu Zalo, ADR
+CONTEXT.md       Thuật ngữ dùng trong code và giao diện
 ```
 
-## Lệnh
+Nên đọc trước: [`CONTEXT.md`](CONTEXT.md) (thuật ngữ), [`docs/zalo-layout.md`](docs/zalo-layout.md) (Zalo lưu file thế nào), [`docs/adr/`](docs/adr) (các quyết định lớn).
 
-| Lệnh | Mô tả |
-|---|---|
-| `pnpm dev` | Chạy server + web ở chế độ dev |
-| `pnpm scan [dir] [--db file]` | Quét Media Store và in báo cáo (theo loại, thư mục kho, hội thoại) |
-| `pnpm test` | Chạy test |
-| `pnpm typecheck` | Kiểm tra kiểu |
+Phát hành: tăng `version` trong `apps/desktop/src-tauri/tauri.conf.json`, rồi đẩy tag `vX.Y.Z`. GitHub Actions build file cài, ký bản cập nhật và tạo bản nháp Release.
 
-Biến môi trường server: `PORT` (mặc định 5174), `ZC_DATA_DIR` (mặc định `./data`), `ZC_QUARANTINE_DIR` (mặc định `%APPDATA%\zalo-cleaner\quarantine`, phải cùng ổ với ZaloData).
+Khi viết test hoặc tài liệu, đừng dùng uid hay ID hội thoại Zalo thật. Hãy dùng số giả.
 
-## Lưu ý an toàn
+## Giấy phép
 
-- Phải **thoát hẳn Zalo** trước khi cách ly / khôi phục — app tự kiểm tra và từ chối nếu Zalo đang chạy.
-- Cách ly chưa giải phóng dung lượng; chỉ khi xoá vĩnh viễn (bấm tay hoặc sau 7 ngày) ổ đĩa mới trống ra.
-- Ảnh/video đã xoá có thể không xem lại được trong hội thoại cũ. **Chưa thực nghiệm** Zalo phản ứng thế nào — xem mục "Thực nghiệm" trong [`docs/zalo-layout.md`](docs/zalo-layout.md); nên thử trước với một hội thoại nhỏ.
-- Không bao giờ đụng tới thumbnail (`Cache/`…), `.rescache`, CSDL, hay file ngoài ZaloDownloads.
+[MIT](LICENSE). Zola Cleaner là dự án độc lập, **không liên kết với Zalo hay VNG**. "Zalo" là nhãn hiệu của chủ sở hữu tương ứng.
