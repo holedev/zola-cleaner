@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { addRoot, type Db, openDb } from "./db.ts";
@@ -168,6 +168,54 @@ test("cách ly gỡ mọi Link; khôi phục tạo lại hardlink; purge xoá h�
     const st2 = s.db.prepare("SELECT status FROM items WHERE id = ?").get(aId) as { status: string };
     assert.equal(st2.status, "deleted");
     await assert.rejects(restoreJob(s.db, q2.jobId, { checkZalo: false }));
+  } finally {
+    s.cleanup();
+  }
+});
+
+test("khôi phục sau khi Zalo đã tải lại ảnh: nối lại thành hardlink, không để hai bản", async () => {
+  const s = await setup();
+  try {
+    const original = readFileSync(s.a);
+    const ino = statSync(s.a).ino;
+    const q = await quarantine(s.db, { rootId: s.rootId, convIds: ["111"] }, {
+      quarantineBase: s.quarantineBase,
+      checkZalo: false,
+    });
+
+    // Zalo (có Cloud) tải lại ảnh khi mở hội thoại: chỉ ghi vào resource/, file mới, nlink 1
+    writeFileSync(s.aRes, original);
+    await startScan(s.db, s.rootId).done; // người dùng quét lại trước khi khôi phục
+    assert.equal(getStats(s.db, { rootId: s.rootId }).total.bytes, 1560);
+
+    const r = await restoreJob(s.db, q.jobId, { checkZalo: false });
+    assert.deepEqual({ moved: r.moved, failed: r.failed }, { moved: 1, failed: 0 });
+    assert.equal(statSync(s.a).ino, ino);
+    assert.equal(statSync(s.aRes).ino, ino); // bản tải lại được thay bằng Link tới bản gốc
+    assert.equal(statSync(s.a).nlink, 2);
+
+    await startScan(s.db, s.rootId).done;
+    assert.equal(getStats(s.db, { rootId: s.rootId }).total.bytes, 1560); // không đếm hai bản
+  } finally {
+    s.cleanup();
+  }
+});
+
+test("khôi phục khi file ở đích khác nội dung: giữ file của Zalo, không ghi đè", async () => {
+  const s = await setup();
+  try {
+    const q = await quarantine(s.db, { rootId: s.rootId, convIds: ["111"] }, {
+      quarantineBase: s.quarantineBase,
+      checkZalo: false,
+    });
+    const other = Buffer.alloc(120, 7);
+    writeFileSync(s.aRes, other);
+
+    const r = await restoreJob(s.db, q.jobId, { checkZalo: false });
+    assert.equal(r.failed, 0);
+    assert.equal(statSync(s.a).size, 100); // bản gốc về chỗ cũ
+    assert.deepEqual(readFileSync(s.aRes), other); // file Zalo vừa ghi còn nguyên
+    assert.notEqual(statSync(s.aRes).ino, statSync(s.a).ino);
   } finally {
     s.cleanup();
   }

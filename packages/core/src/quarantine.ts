@@ -6,7 +6,18 @@
  * - Restore = rename ngược + tạo lại hardlink cho các Link còn lại.
  * - Purge = xoá file trong thư mục cách ly → lúc này dung lượng mới thật sự được giải phóng.
  */
-import { existsSync, linkSync, mkdirSync, renameSync, rmSync, unlinkSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  linkSync,
+  mkdirSync,
+  openSync,
+  readSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type Db, getRoot, tx } from "./db.ts";
@@ -179,18 +190,54 @@ function orderLinks(links: StoredLink[]): StoredLink[] {
 
 const absOf = (rootPath: string, relPath: string) => path.join(rootPath, ...relPath.split("/"));
 
-/** Đưa một Media Item về đủ mọi Link ban đầu. Idempotent: chạy lại sau khi bị ngắt giữa chừng vẫn đúng. */
+function sameFile(a: string, b: string): boolean {
+  const sa = statSync(a, { bigint: true });
+  const sb = statSync(b, { bigint: true });
+  return sa.dev === sb.dev && sa.ino === sb.ino;
+}
+
+/** So sánh nội dung hai file theo từng khối (video có thể lớn, không đọc cả file vào bộ nhớ). */
+function sameContent(a: string, b: string): boolean {
+  if (statSync(a).size !== statSync(b).size) return false;
+  const fa = openSync(a, "r");
+  const fb = openSync(b, "r");
+  try {
+    const ba = Buffer.alloc(1 << 20);
+    const bb = Buffer.alloc(1 << 20);
+    for (;;) {
+      const na = readSync(fa, ba, 0, ba.length, null);
+      const nb = readSync(fb, bb, 0, bb.length, null);
+      if (na !== nb || !ba.subarray(0, na).equals(bb.subarray(0, nb))) return false;
+      if (na === 0) return true;
+    }
+  } finally {
+    closeSync(fa);
+    closeSync(fb);
+  }
+}
+
+/**
+ * Đưa một Media Item về đủ mọi Link ban đầu. Idempotent: chạy lại sau khi bị ngắt giữa chừng vẫn đúng.
+ * Trong lúc cách ly, Zalo có thể đã tải lại đúng ảnh đó (từ Cloud) vào một Link cũ — file mới, nlink 1.
+ * Cùng nội dung → thay bằng Link tới bản gốc (không để hai bản). Khác nội dung → giữ file của Zalo.
+ */
 function restoreLinks(rootPath: string, links: StoredLink[], quarantinePath: string): void {
   const [primary, ...others] = links.map((l) => absOf(rootPath, l.relPath));
   if (!primary) return;
   if (existsSync(quarantinePath)) {
-    if (existsSync(primary)) throw new Error(`Đã có file khác ở ${primary}`);
+    if (existsSync(primary)) {
+      if (!sameContent(primary, quarantinePath)) throw new Error(`Đã có file khác ở ${primary}`);
+      unlinkSync(primary);
+    }
     mkdirSync(path.dirname(primary), { recursive: true });
     renameSync(quarantinePath, primary);
   }
   if (!existsSync(primary)) throw new Error(`Mất file trong thư mục cách ly: ${quarantinePath}`);
   for (const other of others) {
-    if (existsSync(other)) continue;
+    if (existsSync(other)) {
+      if (sameFile(primary, other) || !sameContent(primary, other)) continue;
+      unlinkSync(other);
+    }
     mkdirSync(path.dirname(other), { recursive: true });
     linkSync(primary, other);
   }
@@ -333,8 +380,9 @@ export async function restoreJob(db: Db, jobId: number, opts: JobOptions = {}): 
     .all(jobId) as unknown as JobItemRow[];
   const qItem = db.prepare("SELECT seen_scan_id FROM items WHERE id = ?");
   const qLink = db.prepare(
+    // Link có thể đang trỏ tới bản Zalo tải lại (nếu đã quét lại) → trỏ về Media Item gốc; lần quét sau tự đánh dấu bản kia missing
     `INSERT INTO links (item_id, root_id, rel_path, conv_id, seen_scan_id) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT (root_id, rel_path) DO NOTHING`,
+     ON CONFLICT (root_id, rel_path) DO UPDATE SET item_id = excluded.item_id`,
   );
   const result: JobResult = { jobId, moved: 0, failed: 0, bytes: 0 };
 

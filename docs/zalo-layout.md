@@ -45,10 +45,22 @@ Máy khảo sát: Zalo PC 5.x, đã migrate sang layout mới, một tài khoả
 - 161 hội thoại có media dọn được (sau khi gộp hai dạng ID nhóm).
 - Theo loại: ảnh 5.9 GB, tài liệu 4.2 GB, video 3.1 GB, file nén 0.8 GB (GB thập phân).
 
-## Thực nghiệm (Giai đoạn 0)
+## Thực nghiệm (Giai đoạn 0, 2026-11-01)
 
-Chưa làm. Cần trả lời:
+Cách ly nhóm `g<id>` (10 ảnh JXL, 1.4 MB, không dùng chung) bằng app Node, job #1. Tài khoản **có gói Zalo Cloud**.
 
-- [ ] Xoá ảnh gốc của 1 hội thoại (giữ thumbnail): Zalo hiển thị thumbnail mờ, ô hỏng, hay tự tải lại?
-- [ ] `.rescache` bị lệch có làm Zalo lỗi / báo sai dung lượng không? → quyết định có cần sửa `.rescache`.
-- [ ] Khôi phục (tạo lại hardlink) có làm Zalo hiển thị lại bình thường không?
+- [x] **Zalo tự tải lại ảnh khi mở hội thoại**, hiển thị bình thường, không báo lỗi. Trong ~1 phút sau khi mở nhóm,
+  9/10 ảnh đã được tải lại; ảnh còn lại (chưa cuộn tới) chưa tải. Nội dung tải lại **giống từng byte** bản gốc.
+  - Ảnh tải lại chỉ nằm ở `resource/<convId>/picture/<msgTs>_…_<hash>.jxl`, **nlink = 1**. Zalo **không** tạo lại Link kho trong `picture/<convId>_group/`.
+  - Thumbnail trong `resource/<convId>/Cache/` không bị đụng tới.
+- [x] **`.rescache`: Zalo tự sửa.** Ngay khi mở, Zalo ghi lại `.rescache` của cả `picture/<convId>_group/` và `resource/<convId>/picture/`
+  thành rỗng (`{"__version__":1,"totalSize":0,"count":0,"data":{}}`). → **App không cần và không được sửa `.rescache`.**
+- [ ] Khôi phục sau khi Zalo đã tải lại: đường dẫn `resource/…` đã có file mới cùng nội dung → `restoreJob` hiện tại bỏ qua Link đó,
+  kết quả là **hai bản riêng** (bản khôi phục ở `picture/`, bản tải lại ở `resource/`). Không hỏng nhưng tốn gấp đôi chỗ.
+  → Đã sửa: file ở đích **cùng nội dung** thì được thay bằng Link tới bản gốc; **khác nội dung** thì giữ file của Zalo.
+  Chưa kiểm tra Zalo hiển thị ra sao sau khi khôi phục.
+
+Hệ quả:
+- Với tài khoản có Cloud, dọn ảnh gần như không mất gì: ảnh được tải lại khi xem. Dung lượng chỉ "mất lại" cho ảnh được mở xem.
+- **Chưa biết** với tài khoản không có Cloud: ảnh cũ có thể đã hết hạn trên server Zalo → mất hẳn. Vẫn phải cảnh báo và giữ Retention.
+- Media Item có thể chỉ có Link trong `resource/` (nlink 1) — quét và dọn phải xử lý được (bản hiện tại đã xử lý: area suy từ `resource/<conv>/<area>/`).
