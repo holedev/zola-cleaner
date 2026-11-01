@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AutoDownloadSteps } from "@/components/auto-download-tip";
 import { useBlocking } from "@/components/blocking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -229,6 +230,18 @@ export function SettingsPage() {
                 }
               />
             )}
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-3">
+        <SectionTitle
+          title="Giữ file Zalo không bị hết hạn"
+          hint="Một tuỳ chọn có sẵn trong Zalo PC. Zola Cleaner không tự tải file thay Zalo được."
+        />
+        <Card>
+          <CardContent>
+            <AutoDownloadSteps />
           </CardContent>
         </Card>
       </section>

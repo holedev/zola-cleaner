@@ -54,6 +54,16 @@ _Avoid_: preview
 Thời điểm tin nhắn chứa Media Item được gửi. Là "tuổi" của Media Item khi lọc.
 _Avoid_: mtime, ngày sửa đổi
 
+**Auto-download**:
+Tuỳ chọn có sẵn của Zalo PC: tự tải ảnh, file, video, tin nhắn thoại dưới 30MB về Media Store khi tin nhắn tới, chỉ khi Zalo PC đang chạy.
+App không bật hộ được và không biết nó đang bật hay tắt; app chỉ hướng dẫn người dùng bật.
+_Avoid_: tự tải của app (app không tải gì từ Zalo)
+
+**File Expiry**:
+Không có zCloud thì file chỉ nằm trên máy chủ Zalo một số ngày kể từ lúc gửi. File chưa có trong Media Store lúc hết hạn thì mất hẳn;
+Media Item đã dọn cũng không tải lại được nữa.
+_Avoid_: hết hạn thùng rác (đó là Retention)
+
 ## Dọn dẹp
 
 **Suggestion**:

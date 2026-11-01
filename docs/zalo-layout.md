@@ -77,3 +77,18 @@ Hệ quả:
 - Với tài khoản có Cloud, dọn ảnh gần như không mất gì: ảnh được tải lại khi xem. Dung lượng chỉ "mất lại" cho ảnh được mở xem.
 - **Chưa biết** với tài khoản không có Cloud: ảnh cũ có thể đã hết hạn trên server Zalo → mất hẳn. Vẫn phải cảnh báo và giữ Retention.
 - Media Item có thể chỉ có Link trong `resource/` (nlink 1) — quét và dọn phải xử lý được (bản hiện tại đã xử lý: area suy từ `resource/<conv>/<area>/`).
+
+## Tự tải & hết hạn (khảo sát Zalo 26.10.20, 2026-11-01)
+
+Nguồn: chuỗi giao diện trong `resources\app.asar` của Zalo PC (chỉ đọc).
+
+- Zalo PC có tuỳ chọn **Cài đặt → Tin nhắn → Cài đặt khác → "Tự động tải trước Ảnh/File/Video/Tin nhắn thoại dưới 30MB"**
+  (`STR_FILES_CONF_SEC_AUTO_DOWNLOAD_ENABLE`). Chỉ áp dụng cho file ≤ 30MB và chỉ khi Zalo PC đang chạy.
+- Không có zCloud thì file chỉ nằm trên máy chủ một số ngày: *"File chỉ được lưu tối đa $0$ ngày kể từ thời điểm gửi. Máy chủ
+  sẽ tự động xóa File sau $0$ ngày"* (`STR_FILE_EXPIRED_DETAIL_L_2`). File chưa tải về máy trước lúc đó thì mất hẳn
+  ("File không còn tồn tại").
+- `config.json` không chứa tuỳ chọn tự tải → app không biết người dùng đã bật hay chưa.
+- CSDL trong `Database\_production\`: các file cấp chung (`Qos.db`, `Storage.db`, `SecureLocalstorage.db`…) là SQLite thường;
+  CSDL theo tài khoản (`<uid>\Core\Message\*.db`, `Media.db`, `MsgInfo.db`, `Res.db`…) **bị mã hoá**.
+  → App không biết được "có file mới chưa tải". Không đọc các CSDL này, không điều khiển giao diện Zalo: xem
+  [ADR 0003](adr/0003-khong-dieu-khien-zalo.md). App chỉ hướng dẫn bật tuỳ chọn tự tải của Zalo.

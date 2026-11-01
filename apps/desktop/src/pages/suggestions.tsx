@@ -4,6 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { AutoDownloadTip } from "@/components/auto-download-tip";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -110,6 +111,8 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup, onBrowse }: Props
           </span>
         </div>
       </section>
+
+      <AutoDownloadTip />
     </div>
   );
 }
