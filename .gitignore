@@ -8,3 +8,6 @@ data/
 .env
 .env.local
 target/
+
+# Liên kết skill cục bộ (trỏ tới .agents/ bằng đường dẫn tuyệt đối) và cài đặt riêng của Claude Code
+.claude/
