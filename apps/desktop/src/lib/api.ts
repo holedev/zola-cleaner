@@ -71,8 +71,18 @@ export interface CleanupFilter {
   minSize?: number;
   /** Chỉ Media Item có thời điểm tin nhắn trước mốc này (epoch ms). */
   beforeTs?: number;
+  /** Chỉ các định dạng này (zip, pdf…) — chỉ áp dụng cho tài liệu / âm thanh & khác, không ảnh hưởng ảnh và video. */
+  docKinds?: string[];
   /** File người dùng bỏ tick trong màn xem trước — giữ lại. */
   excludeIds?: number[];
+}
+
+/** Dung lượng sẽ dọn của một định dạng (zip, pdf, mp3…). */
+export interface KindBucket {
+  kind: string;
+  category: string;
+  count: number;
+  bytes: number;
 }
 
 export interface CleanupItem {
@@ -239,6 +249,7 @@ export const api = {
   setAlias: (rootId: number, convId: string, alias: string | null) =>
     call<void>("set_alias", { rootId, convId, alias }),
   preview: (filter: CleanupFilter) => call<CleanupPreview>("preview", { filter }),
+  docKinds: (filter: CleanupFilter) => call<KindBucket[]>("doc_kinds", { filter }),
   quarantine: (filter: CleanupFilter) => call<JobResult>("quarantine", { filter }),
   cleanupItems: (filter: CleanupFilter, group: ItemGroup, order: ItemOrder, offset: number, limit: number) =>
     call<CleanupItems>("cleanup_items", { filter, group, order, offset, limit }),
@@ -311,9 +322,14 @@ export const DOC_LABEL: Record<string, string> = {
   xml: "XML",
   html: "HTML",
   drawio: "draw.io",
+  bin: "Không rõ loại",
+  "": "Không rõ loại",
 };
 
 export const docLabel = (kind: string) => DOC_LABEL[kind] ?? kind.toUpperCase();
+
+/** Tên các định dạng (gộp trùng nhãn), ví dụ "ZIP, RAR". */
+export const docLabels = (kinds: string[]) => [...new Set(kinds.map(docLabel))].join(", ");
 
 /** Màu biểu tượng theo nhóm tài liệu (giống màu quen thuộc của Office). */
 export const docColor = (kind: string) =>

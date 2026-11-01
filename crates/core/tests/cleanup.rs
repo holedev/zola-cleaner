@@ -1024,3 +1024,50 @@ fn tim_ten_tai_lieu_tu_ban_da_luu_va_tieu_de() {
     // Lần sau không đọc lại file đã kiểm tra
     assert_eq!(resolve_doc_names(&s.db, s.root_id, &[]).unwrap().checked, 0);
 }
+
+#[test]
+fn don_tai_lieu_theo_dinh_dang() {
+    use zc_core::quarantine::doc_kind_breakdown;
+    let s = setup();
+    let old = "16000000000";
+    let rar = put(&s.store, "file/zz_rar", b"Rar!\x1a\x07\x00", 300);
+    link(
+        &s.store,
+        &rar,
+        &format!("resource/111/file/{old}06_sender_111"),
+    );
+    s.rescan();
+
+    let f = CleanupFilter {
+        categories: Some(["image", "document", "archive"].map(String::from).to_vec()),
+        ..s.filter(&["111"])
+    };
+    // Bảng định dạng: chỉ tài liệu / file nén, lớn nhất trước
+    let kinds = doc_kind_breakdown(&s.db, &f).unwrap();
+    assert_eq!(
+        kinds
+            .iter()
+            .map(|k| (k.kind.as_str(), k.bytes))
+            .collect::<Vec<_>>(),
+        [("pdf", 800), ("rar", 300)]
+    );
+
+    // Chỉ chọn RAR → PDF được giữ, ảnh vẫn dọn như thường
+    let only_rar = CleanupFilter {
+        doc_kinds: Some(vec!["rar".into()]),
+        ..f.clone()
+    };
+    assert_eq!(
+        preview_cleanup(&s.db, &only_rar, 20).unwrap().bytes,
+        100 + 300
+    );
+    // Bảng định dạng không bị chính lựa chọn định dạng thu hẹp
+    assert_eq!(doc_kind_breakdown(&s.db, &only_rar).unwrap().len(), 2);
+
+    // Chỉ chọn ảnh → không có định dạng tài liệu nào để chọn
+    let images = CleanupFilter {
+        categories: Some(vec!["image".into()]),
+        ..f
+    };
+    assert!(doc_kind_breakdown(&s.db, &images).unwrap().is_empty());
+}

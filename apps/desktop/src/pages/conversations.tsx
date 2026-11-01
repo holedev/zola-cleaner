@@ -14,9 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, CATEGORY_LABEL, type CleanupFilter, type Conversation, docColor, docLabel, errorMessage, formatBytes, formatDate } from "@/lib/api";
+import { api, CATEGORY_LABEL, type CleanupFilter, type Conversation, docColor, docLabel, errorMessage, formatBytes, formatDate, type KindBucket } from "@/lib/api";
 import { describeFilter, describeKept } from "@/lib/describe";
-import { useConversations, useDebounced, usePreview } from "@/lib/queries";
+import { useConversations, useDebounced, useDocKinds, usePreview } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 /** Nhóm Media Kind trên bộ lọc → các category của lõi. Tài liệu không bao giờ được chọn sẵn. */
@@ -46,6 +46,80 @@ const SORT_VALUE: Record<SortKey, (c: Conversation) => number | string> = {
   lastTs: (c) => c.lastTs ?? 0,
 };
 
+/** Gộp các định dạng cùng nhãn (docx + doc → Word) thành một ô chọn. */
+function groupFormats(buckets: KindBucket[]) {
+  const map = new Map<string, { label: string; kinds: string[]; count: number; bytes: number }>();
+  for (const b of buckets) {
+    const label = docLabel(b.kind);
+    const g = map.get(label) ?? { label, kinds: [], count: 0, bytes: 0 };
+    g.kinds.push(b.kind);
+    g.count += b.count;
+    g.bytes += b.bytes;
+    map.set(label, g);
+  }
+  return [...map.values()].sort((a, b) => b.bytes - a.bytes);
+}
+
+/** Chọn định dạng tài liệu cần dọn (ZIP, RAR, PDF…). Không chọn ô nào = mọi định dạng. */
+function FormatPicker({
+  buckets,
+  loading,
+  selected,
+  onChange,
+}: {
+  buckets: KindBucket[] | undefined;
+  loading: boolean;
+  selected: Set<string>;
+  onChange: (s: Set<string>) => void;
+}) {
+  const groups = groupFormats(buckets ?? []);
+  const toggle = (kinds: string[], on: boolean) => {
+    const next = new Set(selected);
+    for (const k of kinds) {
+      if (on) next.delete(k);
+      else next.add(k);
+    }
+    onChange(next);
+  };
+  return (
+    <div className="grid basis-full gap-2">
+      <Label className="text-muted-foreground text-xs">
+        Định dạng tài liệu
+        <span className="font-normal">
+          {selected.size ? "· chỉ dọn các định dạng đã chọn" : "· đang dọn mọi định dạng, bấm để chỉ chọn vài loại"}
+        </span>
+        {loading && <Spinner className="size-3" />}
+      </Label>
+      <div className="flex flex-wrap items-center gap-2">
+        {groups.length === 0 && !loading && <span className="text-muted-foreground text-sm">Không có tài liệu nào khớp bộ lọc.</span>}
+        {groups.map((g) => {
+          const on = g.kinds.some((k) => selected.has(k));
+          return (
+            <button
+              key={g.label}
+              type="button"
+              aria-pressed={on}
+              title={`${g.count.toLocaleString("vi-VN")} file`}
+              onClick={() => toggle(g.kinds, on)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-sm transition-colors",
+                on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted bg-white",
+              )}
+            >
+              {g.label} <span className={cn("figure", on ? "opacity-90" : "text-muted-foreground")}>{formatBytes(g.bytes)}</span>
+            </button>
+          );
+        })}
+        {selected.size > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => onChange(new Set())}>
+            Bỏ chọn
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** Nhóm "Âm thanh & khác" gồm những gì — hiện khi rê chuột. */
 const OTHER_HINT = "Ghi âm, nhạc (mp3, m4a) và vài file không nhận ra loại";
 
@@ -61,6 +135,8 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const [kinds, setKinds] = useState<Set<string>>(new Set(KINDS.filter((k) => k.default).map((k) => k.key)));
   const [olderThanDays, setOlderThanDays] = useState(0);
   const [minSizeMb, setMinSizeMb] = useState("");
+  /** Định dạng tài liệu được chọn (zip, pdf…). Rỗng = mọi định dạng. */
+  const [docKinds, setDocKinds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allConvs, setAllConvs] = useState(false);
   const [query, setQuery] = useState("");
@@ -71,6 +147,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
     // Bấm lại cột đang sắp → đảo chiều; cột mới → tên A→Z, số liệu lớn → nhỏ
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" }));
 
+  const withDocs = kinds.has("document") || kinds.has("other");
   const rawBase: CleanupFilter = useMemo(() => {
     const mb = Number(minSizeMb);
     return {
@@ -78,8 +155,9 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
       categories: KINDS.filter((k) => kinds.has(k.key)).flatMap((k) => [...k.categories]),
       olderThanDays: olderThanDays || undefined,
       minSize: mb > 0 ? Math.round(mb * 1024 * 1024) : undefined,
+      docKinds: withDocs && docKinds.size ? [...docKinds].sort() : undefined,
     };
-  }, [rootId, kinds, olderThanDays, minSizeMb]);
+  }, [rootId, kinds, olderThanDays, minSizeMb, withDocs, docKinds]);
   const base = useDebounced(rawBase);
   const convs = useConversations(base);
   // Báo "đang tính" ngay khi bộ lọc vừa đổi, không đợi hết thời gian debounce
@@ -92,6 +170,16 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const selection = useDebounced(rawSelection);
   const preview = usePreview(selection);
   const previewing = rawSelection !== selection || preview.isFetching;
+  // Dung lượng từng định dạng trong phạm vi đang chọn (hội thoại đã tick, hoặc mọi hội thoại)
+  const rawKindScope: CleanupFilter | null = useMemo(
+    () =>
+      withDocs
+        ? { ...rawBase, docKinds: undefined, convIds: allConvs || selected.size === 0 ? undefined : [...selected].sort() }
+        : null,
+    [withDocs, rawBase, allConvs, selected],
+  );
+  const kindScope = useDebounced(rawKindScope);
+  const kindBuckets = useDocKinds(kindScope);
 
   // Đổi Media Store → bỏ chọn
   useEffect(() => setSelected(new Set()), [rootId]);
@@ -198,6 +286,14 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
             </Label>
           </RadioGroup>
         </div>
+        {withDocs && (
+          <FormatPicker
+            buckets={kindBuckets.data}
+            loading={rawKindScope !== kindScope || kindBuckets.isFetching}
+            selected={docKinds}
+            onChange={setDocKinds}
+          />
+        )}
       </div>
 
       {rawBase.categories?.length ? (

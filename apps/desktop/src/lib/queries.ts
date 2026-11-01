@@ -47,6 +47,15 @@ export const usePreview = (filter: CleanupFilter | null) =>
     placeholderData: keepPreviousData,
   });
 
+/** Các định dạng tài liệu có thể dọn theo bộ lọc (bỏ qua docKinds). */
+export const useDocKinds = (filter: CleanupFilter | null) =>
+  useQuery({
+    queryKey: ["index", "docKinds", filter] as const,
+    queryFn: () => api.docKinds(filter!),
+    enabled: filter != null,
+    placeholderData: keepPreviousData,
+  });
+
 export const useJobs = (rootId: number) => useQuery({ queryKey: keys.jobs(rootId), queryFn: () => api.jobs(rootId) });
 
 export function useInvalidateIndex() {

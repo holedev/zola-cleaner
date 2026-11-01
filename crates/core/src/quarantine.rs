@@ -50,6 +50,14 @@ pub struct CleanupPreview {
     pub samples: Vec<CleanupSample>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct KindBucket {
+    pub kind: String,
+    pub category: String,
+    pub count: i64,
+    pub bytes: i64,
+}
+
 pub struct JobOptions {
     /// Thư mục chứa các Quarantine Job. Phải cùng ổ đĩa với Media Store.
     pub quarantine_base: PathBuf,
@@ -281,6 +289,44 @@ pub fn preview_cleanup(
         by_category,
         samples,
     })
+}
+
+/// Dung lượng sẽ dọn của từng định dạng tài liệu / file nén / âm thanh / khác (zip, pdf, mp3…),
+/// theo bộ lọc nhưng bỏ qua `doc_kinds` — để người dùng chọn định dạng cần dọn.
+pub fn doc_kind_breakdown(db: &Db, filter: &CleanupFilter) -> Result<Vec<KindBucket>> {
+    let f = CleanupFilter {
+        doc_kinds: None,
+        exclude_ids: None,
+        categories: Some(
+            filter
+                .effective_categories()
+                .into_iter()
+                .filter(|c| c != "image" && c != "video")
+                .collect(),
+        ),
+        ..filter.clone()
+    };
+    if f.categories.as_ref().is_some_and(|c| c.is_empty()) {
+        return Ok(vec![]);
+    }
+    let w = f.candidate_where();
+    let s = f.shared_cond();
+    let mut q = db.prepare(&format!(
+        "SELECT i.kind, i.category, COUNT(*), SUM(i.size) AS bytes FROM items i WHERE {} AND NOT {} GROUP BY i.kind, i.category ORDER BY bytes DESC",
+        w.sql, s.sql
+    ))?;
+    let params: Vec<Value> = w.params.into_iter().chain(s.params).collect();
+    let rows = q
+        .query_map(params_from_iter(params), |r| {
+            Ok(KindBucket {
+                kind: r.get(0)?,
+                category: r.get(1)?,
+                count: r.get(2)?,
+                bytes: r.get(3)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(rows)
 }
 
 /// Ổ đĩa của một đường dẫn (`c:\`), để kiểm tra rename không phải chép qua ổ khác.

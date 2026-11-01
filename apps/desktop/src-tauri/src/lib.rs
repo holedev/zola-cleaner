@@ -481,6 +481,17 @@ async fn preview(state: AppStateRef<'_>, filter: CleanupFilter) -> CmdResult<Cle
     blocking(move || Ok(quarantine::preview_cleanup(&s.db()?, &filter, 20)?)).await
 }
 
+/// Dung lượng sẽ dọn theo từng định dạng tài liệu (zip, pdf…), để chọn định dạng cần dọn.
+#[tauri::command]
+async fn doc_kinds(
+    state: AppStateRef<'_>,
+    filter: CleanupFilter,
+) -> CmdResult<Vec<quarantine::KindBucket>> {
+    check_filter(&filter)?;
+    let s = state.inner().clone();
+    blocking(move || Ok(quarantine::doc_kind_breakdown(&s.db()?, &filter)?)).await
+}
+
 /// Một trang file sẽ bị dọn, để xem trước và bỏ tick.
 #[tauri::command]
 async fn cleanup_items(
@@ -1088,6 +1099,7 @@ pub fn run() {
             conversation_months,
             set_alias,
             preview,
+            doc_kinds,
             cleanup_items,
             quarantine,
             jobs,

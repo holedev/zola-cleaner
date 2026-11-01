@@ -1,4 +1,4 @@
-import type { CleanupFilter } from "./api";
+import { type CleanupFilter, docLabels } from "./api";
 
 const DAY = 86_400_000;
 
@@ -25,7 +25,11 @@ export function cutoffMs(f: CleanupFilter): number | null {
  */
 export function describeFilter(f: CleanupFilter): string {
   const cats = f.categories ?? ["image", "video"];
-  const kinds = KIND_GROUPS.filter((g) => g.categories.some((c) => cats.includes(c))).map((g) => g.label);
+  const groups = KIND_GROUPS.filter((g) => g.categories.some((c) => cats.includes(c)));
+  const media = (g: (typeof KIND_GROUPS)[number]) => g.categories.some((c) => c === "image" || c === "video");
+  const kinds = groups.filter((g) => !f.docKinds?.length || media(g)).map((g) => g.label);
+  // Đã chọn định dạng → nói rõ "file ZIP, RAR" thay cho "tài liệu" / "âm thanh & khác"
+  if (f.docKinds?.length && groups.some((g) => !media(g))) kinds.push(`file ${docLabels(f.docKinds)}`);
   const parts: string[] = [];
   const cut = cutoffMs(f);
   parts.push(cut != null ? `gửi trước ngày ${dateVi(cut)}` : "gửi vào bất kỳ lúc nào");
