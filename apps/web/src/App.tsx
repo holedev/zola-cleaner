@@ -1,147 +1,164 @@
-import { useCallback, useEffect, useState } from "react";
-import { api, type Bucket, formatBytes, type Health, type Root, type ScanProgress, type Stats } from "./api.ts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, formatBytes, type Health, type Root, type ScanProgress } from "./api.ts";
+import { Conversations } from "./Conversations.tsx";
+import { Jobs } from "./Jobs.tsx";
+import { Overview } from "./Overview.tsx";
 
-const CATEGORY_LABEL: Record<string, string> = {
-  image: "Ảnh",
-  video: "Video",
-  audio: "Âm thanh",
-  document: "Tài liệu",
-  archive: "File nén",
-  database: "CSDL (không xoá)",
-  other: "Khác",
-};
+type Tab = "conversations" | "jobs" | "overview";
 
 export function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [roots, setRoots] = useState<Root[]>([]);
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [newPath, setNewPath] = useState("");
-  const [progress, setProgress] = useState<Record<number, ScanProgress>>({});
+  const [rootId, setRootId] = useState<number | null>(null);
+  const [tab, setTab] = useState<Tab>("conversations");
+  const [scan, setScan] = useState<ScanProgress | null>(null);
+  /** Tăng lên mỗi khi dữ liệu trên đĩa đổi (quét xong, cách ly, khôi phục…) để các màn hình tải lại. */
+  const [version, setVersion] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const bump = useCallback(() => setVersion((v) => v + 1), []);
+
+  const refreshHealth = useCallback(async () => {
     try {
-      const [h, r, s] = await Promise.all([api.health(), api.roots(), api.stats()]);
-      setHealth(h);
-      setRoots(r);
-      setStats(s);
-      setError(null);
+      setHealth(await api.health());
     } catch (e) {
       setError((e as Error).message);
     }
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void (async () => {
+      try {
+        const r = await api.roots();
+        setRoots(r);
+        setRootId((cur) => cur ?? r[0]?.id ?? null);
+      } catch (e) {
+        setError((e as Error).message);
+      }
+    })();
+  }, [version]);
 
-  const onAdd = async () => {
-    if (!newPath.trim()) return;
-    try {
-      await api.addRoot(newPath.trim());
-      setNewPath("");
-      await refresh();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
+  // Trạng thái Zalo đổi thường xuyên → kiểm tra định kỳ
+  useEffect(() => {
+    void refreshHealth();
+    const t = setInterval(refreshHealth, 5000);
+    return () => clearInterval(t);
+  }, [refreshHealth]);
 
-  const onScan = async (root: Root) => {
-    try {
-      const { scanId } = await api.startScan(root.id);
+  /** scanId đang theo dõi qua SSE — tránh mở hai luồng cho cùng một lần quét. */
+  const watching = useRef<number | null>(null);
+  const watch = useCallback(
+    (scanId: number) => {
+      if (watching.current === scanId) return;
+      watching.current = scanId;
       api.watchScan(scanId, (p) => {
-        setProgress((prev) => ({ ...prev, [root.id]: p }));
-        if (p.phase !== "running") void refresh();
+        setScan(p);
+        if (p.phase !== "running") {
+          watching.current = null;
+          bump();
+        }
       });
+    },
+    [bump],
+  );
+
+  // Reload giữa chừng: server vẫn đang quét → theo dõi tiếp
+  const runningScan = health?.scanning.find((s) => s.rootId === rootId)?.scanId;
+  useEffect(() => {
+    if (runningScan != null) watch(runningScan);
+  }, [runningScan, watch]);
+
+  const onScan = async () => {
+    if (rootId == null) return;
+    try {
+      const { scanId } = await api.startScan(rootId);
+      watch(scanId);
     } catch (e) {
       setError((e as Error).message);
     }
   };
+
+  const root = roots.find((r) => r.id === rootId);
+  const scanning = scan?.phase === "running";
 
   return (
     <main>
-      <header>
+      <header className="top">
         <h1>Zalo Cleaner</h1>
-        {health?.zaloRunning && <p className="warn">Zalo đang chạy — hãy tắt Zalo trước khi dọn dẹp.</p>}
-        {error && <p className="error">{error}</p>}
+        <nav>
+          <TabButton current={tab} value="conversations" onClick={setTab}>
+            Hội thoại
+          </TabButton>
+          <TabButton current={tab} value="jobs" onClick={setTab}>
+            Cách ly
+          </TabButton>
+          <TabButton current={tab} value="overview" onClick={setTab}>
+            Tổng quan
+          </TabButton>
+        </nav>
+        <div className="scan">
+          {root && (
+            <code className="muted" title={root.path}>
+              {root.path}
+            </code>
+          )}
+          <button onClick={onScan} disabled={rootId == null || scanning}>
+            {scanning ? "Đang quét…" : "Quét lại"}
+          </button>
+          {scan && (
+            <small className="muted">
+              {scan.seen.toLocaleString()} link · {formatBytes(scan.bytes)}
+              {scan.errors > 0 && ` · lỗi ${scan.errors}`}
+            </small>
+          )}
+        </div>
       </header>
 
-      <section>
-        <h2>Thư mục gốc</h2>
-        <div className="row">
-          <input
-            value={newPath}
-            onChange={(e) => setNewPath(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onAdd()}
-            placeholder="Ví dụ: D:\ZaloData"
-          />
-          <button onClick={onAdd}>Thêm</button>
-        </div>
-        <ul className="roots">
-          {roots.map((r) => {
-            const p = progress[r.id];
-            return (
-              <li key={r.id}>
-                <code>{r.path}</code>
-                <button onClick={() => onScan(r)} disabled={p?.phase === "running"}>
-                  {p?.phase === "running" ? "Đang quét…" : "Quét"}
-                </button>
-                {p && (
-                  <small>
-                    {p.seen.toLocaleString()} file · {formatBytes(p.bytes)} · mới {p.newFiles} · đổi {p.changed} · lỗi{" "}
-                    {p.errors}
-                  </small>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {health?.zaloRunning && (
+        <p className="banner warn">
+          Zalo đang chạy. Xem và chọn thoải mái, nhưng phải <b>thoát hẳn Zalo</b> (cả biểu tượng ở khay hệ thống) thì mới
+          cách ly / khôi phục được.
+        </p>
+      )}
+      {error && (
+        <p className="banner error" onClick={() => setError(null)}>
+          {error}
+        </p>
+      )}
 
-      {stats && (
-        <section>
-          <h2>Tổng quan</h2>
-          <div className="cards">
-            <div className="card">
-              <span>Tổng dung lượng</span>
-              <strong>{formatBytes(stats.total.bytes)}</strong>
-            </div>
-            <div className="card">
-              <span>Số file</span>
-              <strong>{stats.total.count.toLocaleString()}</strong>
-            </div>
-          </div>
-          <div className="grid">
-            <BucketTable title="Theo loại" rows={stats.byCategory} label={(k) => CATEGORY_LABEL[k] ?? k} />
-            <BucketTable title="Theo tuổi" rows={stats.byAge} />
-            <BucketTable title="Theo thư mục" rows={stats.byTopDir} />
-          </div>
-          {/* TODO Giai đoạn 2: biểu đồ theo tháng (stats.byMonth), trang Duyệt file */}
-        </section>
+      {rootId == null ? (
+        <Overview rootId={null} version={version} onChanged={bump} onError={setError} />
+      ) : tab === "conversations" ? (
+        <Conversations
+          rootId={rootId}
+          version={version}
+          zaloRunning={!!health?.zaloRunning}
+          onChanged={bump}
+          onError={setError}
+        />
+      ) : tab === "jobs" ? (
+        <Jobs rootId={rootId} version={version} zaloRunning={!!health?.zaloRunning} onChanged={bump} onError={setError} />
+      ) : (
+        <Overview rootId={rootId} version={version} onChanged={bump} onError={setError} />
       )}
     </main>
   );
 }
 
-function BucketTable({ title, rows, label }: { title: string; rows: Bucket[]; label?: (k: string) => string }) {
-  const max = Math.max(1, ...rows.map((r) => r.bytes));
+function TabButton({
+  current,
+  value,
+  onClick,
+  children,
+}: {
+  current: Tab;
+  value: Tab;
+  onClick: (t: Tab) => void;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <h3>{title}</h3>
-      <table>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.key}>
-              <td>{label ? label(r.key) : r.key}</td>
-              <td className="num">{r.count.toLocaleString()}</td>
-              <td className="num">{formatBytes(r.bytes)}</td>
-              <td className="bar">
-                <span style={{ width: `${(r.bytes / max) * 100}%` }} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <button className={current === value ? "tab active" : "tab"} onClick={() => onClick(value)}>
+      {children}
+    </button>
   );
 }

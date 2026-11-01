@@ -19,7 +19,7 @@ export interface Detection {
 }
 
 /** Số byte đầu file cần đọc để nhận diện. */
-export const HEADER_BYTES = 32;
+export const HEADER_BYTES = 64;
 
 const HEIF_BRANDS = new Set(["heic", "heix", "heim", "heis", "mif1", "msf1", "avif", "avis"]);
 const AUDIO_FTYP_BRANDS = new Set(["M4A ", "M4B ", "M4P "]);
@@ -47,6 +47,10 @@ export function detect(header: Uint8Array, ext = ""): Detection {
   if (startsWith(h, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return { category: "image", kind: "png" };
   if (ascii(h, 0, 4) === "GIF8") return { category: "image", kind: "gif" };
   if (ascii(h, 0, 4) === "RIFF" && ascii(h, 8, 12) === "WEBP") return { category: "image", kind: "webp" };
+  // JPEG XL: codestream trần (FF 0A) hoặc container ISO BMFF có hộp "JXL "
+  if (startsWith(h, [0xff, 0x0a]) || startsWith(h, [0, 0, 0, 0x0c, 0x4a, 0x58, 0x4c, 0x20, 0x0d, 0x0a, 0x87, 0x0a])) {
+    return { category: "image", kind: "jxl" };
+  }
   // "BM" chỉ có 2 byte, rất dễ trùng → cần thêm 4 byte reserved = 0 hoặc đuôi .bmp
   if (ascii(h, 0, 2) === "BM" && (ext === ".bmp" || startsWith(h, [0, 0, 0, 0], 6))) {
     return { category: "image", kind: "bmp" };
@@ -84,10 +88,25 @@ export function detect(header: Uint8Array, ext = ""): Detection {
   if (startsWith(h, [0x50, 0x4b, 0x03, 0x04])) {
     const officeExt: Record<string, string> = { ".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx" };
     const k = officeExt[ext];
-    return k ? { category: "document", kind: k } : { category: "archive", kind: "zip" };
+    if (k) return { category: "document", kind: k };
+    // Tên mục đầu tiên trong ZIP nằm ở byte 30 của local file header → nhận ra Office Open XML khi không có đuôi
+    const first = ascii(h, 30, 30 + 19);
+    if (first.startsWith("word/")) return { category: "document", kind: "docx" };
+    if (first.startsWith("xl/")) return { category: "document", kind: "xlsx" };
+    if (first.startsWith("ppt/")) return { category: "document", kind: "pptx" };
+    if (first === "[Content_Types].xml") return { category: "document", kind: "office" };
+    return { category: "archive", kind: "zip" };
   }
   if (ascii(h, 0, 4) === "Rar!") return { category: "archive", kind: "rar" };
   if (startsWith(h, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) return { category: "archive", kind: "7z" };
 
   return { category: "other", kind: ext.replace(/^\./, "") };
+}
+
+/** Khoá XOR Zalo dùng để "làm nhiễu" tài liệu trong thư mục fileNoise/. */
+export const NOISE_KEY = 0x93;
+
+/** Nhận diện file trong fileNoise/: giải XOR từng byte với NOISE_KEY rồi nhận diện như thường. */
+export function detectNoise(header: Uint8Array, ext = ""): Detection {
+  return detect(header.map((b) => b ^ NOISE_KEY), ext);
 }

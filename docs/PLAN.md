@@ -7,40 +7,42 @@
 
 ## 1. Bối cảnh & vấn đề
 
-- Zalo PC mặc định lưu dữ liệu ở `C:\Users\<user>\AppData\Local\ZaloPC\` (mỗi tài khoản là một thư mục đặt tên bằng dãy số). File nhận được nằm trong `Zalo Received Files`.
-- Zalo cho phép chuyển nơi lưu trữ sang ổ khác (**Cài đặt → Dữ liệu → Quản lý dữ liệu → Thay đổi**). Trường hợp hiện tại: dữ liệu nằm ở **ổ D**, đã lên tới **vài trăm GB**.
-- Tên file là chuỗi băm, thường **không có đuôi file** → không lọc được bằng Explorer theo kiểu `*.jpg`.
-- Xoá hội thoại trong Zalo **không xoá** ảnh/video đã cache trên đĩa.
-- Tính năng dọn dẹp có sẵn của Zalo chỉ xoá theo nhóm thô (bộ nhớ đệm…), không cho chọn theo tuổi, dung lượng, loại.
+- Zalo PC 5.x lưu dữ liệu ở `%APPDATA%\ZaloData` (~17 GB trên máy khảo sát). Media đã tải nằm ở
+  `media\<uid>\ZaloDownloads\` (~15 GB) — đây là **Media Store**, phạm vi dọn duy nhất. Chi tiết: [zalo-layout.md](zalo-layout.md).
+- Tên file là chuỗi băm, thường **không có đuôi file**; tài liệu trong `fileNoise\` còn bị XOR `0x93` → phải nhận diện theo nội dung.
+- Mỗi media có một Link "kho" (`picture\`, `video\`, `fileNoise\`…) và hardlink trong `resource\<convId>\…` → **biết được media thuộc hội thoại nào** mà không cần đọc CSDL Zalo. Xem [ADR 0001](adr/0001-media-item-is-physical-file.md).
+- Xoá hội thoại trong Zalo **không xoá** media đã cache trên đĩa.
+- Tính năng dọn dẹp có sẵn của Zalo chỉ xoá theo nhóm thô, không cho chọn theo hội thoại, tuổi, dung lượng, loại.
+- Thuật ngữ: [CONTEXT.md](../CONTEXT.md).
 
 ### Những điều CHƯA biết (cần xác minh ở Giai đoạn 0)
 
 | Câu hỏi | Cách xác minh |
 |---|---|
-| Cấu trúc thư mục con thực tế trên ổ D (thư mục nào chứa ảnh, video, sticker, avatar, CSDL…) | Chạy `scan` rồi xem báo cáo "theo thư mục" |
-| File có bị mã hoá không, hay chỉ bị đổi tên? | Đọc magic bytes: nếu nhận ra JPEG/PNG/MP4 → chỉ đổi tên |
-| Xoá file cache có làm Zalo lỗi không? Ảnh cũ có tải lại được không? | Thử cách ly một ít file cũ, mở lại Zalo, kiểm tra |
-| Có liên kết được file ↔ hội thoại không (để xoá theo nhóm chat)? | Spike riêng: tìm CSDL của Zalo, xem có đọc được không. **Không cam kết.** |
+| Xoá ảnh gốc (giữ thumbnail) thì Zalo hiện gì? Có tự tải lại không? | Cách ly tay 1 hội thoại nhỏ, mở Zalo, kiểm tra |
+| `.rescache` bị lệch có làm Zalo lỗi / báo sai dung lượng? | Như trên; chỉ thêm logic sửa `.rescache` nếu cần |
+| Khôi phục (tạo lại hardlink) có làm Zalo hiển thị lại bình thường? | Khôi phục sau thử nghiệm trên |
 
 ---
 
 ## 2. Mục tiêu
 
 **Phải có (MVP)**
-1. Quét một hoặc nhiều thư mục gốc, **nhận diện loại file theo nội dung** (magic bytes), không dựa vào tên.
-2. Lưu chỉ mục vào SQLite để lần quét sau **chỉ xử lý phần thay đổi** (quan trọng với vài trăm GB / hàng triệu file).
-3. Dashboard thống kê: tổng dung lượng theo loại, theo thư mục, theo tháng/tuổi, top file lớn nhất.
-4. Lọc & chọn file theo: loại, tuổi (ngày sửa đổi), dung lượng, thư mục.
-5. Dọn dẹp **an toàn**: chạy thử → cách ly (quarantine) → khôi phục hoặc xoá hẳn.
+1. Tự tìm Media Store, quét và **nhận diện Media Kind theo nội dung** (magic bytes, giải XOR cho `fileNoise`).
+2. Chỉ mục **Media Item** (file vật lý) + các **Link** của nó vào SQLite; dung lượng không đếm trùng hardlink; quét tăng dần.
+3. Danh sách **Conversation** xếp theo dung lượng, kèm thumbnail mới nhất và **Alias** do người dùng đặt.
+4. Chọn Conversation + lọc theo Media Kind, **Message Time**, kích thước. Tài liệu mặc định không tick.
+5. Dọn dẹp **an toàn**: Preview → Quarantine Job → Restore hoặc Purge. Shared Media Item chỉ dọn khi mọi Conversation của nó đều được chọn.
 
 **Nên có**
-6. Xem trước ảnh bằng thumbnail, video bằng khung hình đầu.
+6. Thumbnail video bằng khung hình đầu.
 7. Tìm file trùng lặp (cùng nội dung).
-8. Quy tắc dọn dẹp lưu sẵn (ví dụ "video > 50 MB và cũ hơn 6 tháng") và chạy định kỳ.
+8. Quy tắc dọn dẹp lưu sẵn (ví dụ "video nhóm X cũ hơn 3 tháng") và chạy định kỳ.
 
 **Không làm (ít nhất ở giai đoạn đầu)**
-- Không sửa CSDL của Zalo.
-- Không cam kết xoá theo hội thoại (phụ thuộc kết quả spike).
+- Không đọc/sửa CSDL của Zalo; không lấy tên thật của hội thoại.
+- Không đụng ngoài Media Store (CSDL, cache Chromium, sticker, file người dùng tự lưu như `D:\Zalo`).
+- Không xoá Thumbnail (`Cache\`, `richThumb\`, `fileThumb\`).
 - Không chạy như dịch vụ nền / không mở ra mạng LAN.
 
 ---
@@ -48,9 +50,9 @@
 ## 3. Nguyên tắc an toàn (bất biến)
 
 1. **Mặc định là chạy thử.** Mọi thao tác dọn dẹp đều hiển thị trước: bao nhiêu file, bao nhiêu GB, ví dụ file.
-2. **Cách ly trước, xoá sau.** "Xoá" = `rename` file sang thư mục `_zalo_quarantine/<job-id>/` **trên cùng ổ đĩa** (tức thời, không tốn thêm dung lượng), giữ nguyên đường dẫn tương đối. Có nút **Khôi phục**. Chỉ khi người dùng bấm **Xoá vĩnh viễn** (hoặc hết hạn giữ, ví dụ 7 ngày) mới thật sự xoá.
-   - Không dùng Thùng rác Windows: với hàng trăm GB, Recycle Bin có giới hạn dung lượng và rất chậm khi đưa từng file vào.
-3. **Danh sách loại được phép xoá (allowlist).** Mặc định chỉ `image`, `video`. Không bao giờ đụng tới file nhận diện là `database` (SQLite…), file `.db`, `.db-wal`, `.db-shm`, `.ldb`, `.log`, và các thư mục cấu hình.
+2. **Cách ly trước, xoá sau.** Cách ly một Media Item = `rename` một Link vào `%APPDATA%\zalo-cleaner\quarantine\<jobId>\` (cùng ổ với ZaloData, ngoài ZaloData) và gỡ các Link còn lại. Mọi Link được ghi vào nhật ký **trước**; Restore = rename ngược + tạo lại hardlink. Dung lượng chỉ giảm khi Purge (người dùng bấm, hoặc sau Retention 7 ngày).
+   - Không dùng Thùng rác Windows: Recycle Bin có giới hạn dung lượng, chậm, và không hiểu hardlink.
+3. **Allowlist theo thư mục kho.** Chỉ Link kho trong `picture\`, `video\`, `fileNoise\`, `file\` được dọn (kèm các Link `resource\` của cùng Media Item). Không bao giờ dọn `Cache\`, `richThumb\`, `fileThumb\`, `voice\`, `zinstant\`, `.rescache`, file `database`.
 4. **Kiểm tra Zalo đang chạy** (`tasklist` tìm `Zalo.exe`) trước khi cách ly/xoá; yêu cầu tắt Zalo.
 5. **Nhật ký mọi thao tác** trong SQLite (job, file, đường dẫn cũ → mới, thời điểm) để khôi phục được kể cả khi app bị tắt giữa chừng.
 6. **Chỉ lắng nghe `127.0.0.1`**, kiểm tra header `Host` và `Origin`, kèm token ngẫu nhiên sinh lúc khởi động → chống trang web lạ gọi vào API localhost (CSRF / DNS rebinding).
@@ -92,7 +94,7 @@ zalo-cleaner/
 [Thư mục gốc] ──walk──▶ [stat: size, mtime] ──đã có & không đổi?──▶ bỏ qua
                                    │ mới/đổi
                                    ▼
-                          [đọc 32 byte đầu] ─▶ detect() ─▶ category, kind
+                          [đọc 64 byte đầu] ─▶ detect() ─▶ category, kind
                                    ▼
                        [SQLite: bảng files, ghi theo lô 1000 dòng/transaction]
                                    ▼
@@ -106,104 +108,95 @@ zalo-cleaner/
 ## 5. Mô hình dữ liệu (SQLite)
 
 ```sql
-roots(id, path UNIQUE, label, created_at)
+roots(id, path UNIQUE, label, created_at)                       -- mỗi root là một Media Store (ZaloDownloads)
 
-files(
-  id INTEGER PK,
-  root_id, rel_path,              -- UNIQUE(root_id, rel_path)
-  size INTEGER, mtime_ms INTEGER,
-  category TEXT,                  -- image | video | audio | document | archive | database | other
-  kind TEXT,                      -- jpg, png, mp4, heic, sqlite...
-  top_dir TEXT,                   -- 1–2 cấp thư mục đầu, để thống kê nhanh
-  quick_hash TEXT NULL,           -- hash 64KB đầu (tìm trùng)
-  full_hash TEXT NULL,
-  seen_scan_id INTEGER,           -- lần quét gần nhất còn thấy file
-  status TEXT DEFAULT 'present'   -- present | quarantined | deleted | missing
+items(                                                           -- Media Item = file vật lý
+  id INTEGER PK, root_id,
+  file_key TEXT,                  -- "<dev>:<ino>" (NTFS file id) — UNIQUE(root_id, file_key)
+  size, mtime_ms,
+  msg_ts INTEGER NULL,            -- Message Time, lấy từ tên Link trong resource/
+  area TEXT,                      -- thư mục kho: picture | video | fileNoise | file | Cache | ...
+  category, kind,                 -- Media Kind theo nội dung (fileNoise giải XOR 0x93 trước)
+  seen_scan_id,
+  status                          -- present | quarantined | deleted | missing
 )
--- index: (category), (mtime_ms), (size), (top_dir), (status)
+
+links(id, item_id, root_id, rel_path, conv_id NULL, seen_scan_id)   -- UNIQUE(root_id, rel_path)
+conversations(root_id, conv_id, is_group, alias)                    -- PK(root_id, conv_id); chỉ Alias là dữ liệu người dùng
 
 scans(id, root_id, started_at, finished_at, files_seen, files_new, files_changed, files_missing, error_count)
 
-jobs(id, type, filter_json, status, created_at, finished_at, file_count, total_bytes, quarantine_dir)
-job_items(job_id, file_id, from_path, to_path, state, error)   -- state: pending | moved | restored | purged | failed
+jobs(id, root_id, filter_json, status, created_at, finished_at, expires_at, item_count, total_bytes, quarantine_dir)
+job_items(job_id, item_id, links_json, quarantine_path, state, error)  -- state: pending | moved | restored | purged | failed
 
-rules(id, name, filter_json, enabled, schedule)                -- Giai đoạn 4
+rules(id, name, filter_json, enabled, schedule)                    -- Giai đoạn 4
 ```
 
-**Quét tăng dần:** mỗi lần quét tăng `scan_id`; file gặp lại cập nhật `seen_scan_id`. File có `size` + `mtime_ms` không đổi thì **không đọc lại header**. Cuối lần quét, file `present` có `seen_scan_id` cũ → đánh dấu `missing`.
+**Quét tăng dần:** mỗi Link được `stat` (bigint) để lấy `file_key`. Media Item đã biết, cùng `size` + `mtime_ms` → không đọc lại header.
+Mỗi Media Item chỉ đọc header một lần dù có nhiều Link. Cuối lần quét: Link không còn thấy bị xoá khỏi chỉ mục, Media Item `present` không còn thấy → `missing`.
 
 ---
 
-## 6. API (dự kiến)
+## 6. API
 
 | Method | Path | Mô tả |
 |---|---|---|
-| GET | `/api/health` | Kiểm tra server, phiên bản, Zalo có đang chạy |
-| GET/POST/DELETE | `/api/roots` | Quản lý thư mục gốc |
-| POST | `/api/scans` | Bắt đầu quét `{ rootId }` → `{ scanId }` |
-| GET | `/api/scans/:id/events` | SSE tiến độ quét |
-| GET | `/api/stats` | Tổng hợp theo loại / thư mục / tháng / tuổi, top file lớn |
-| GET | `/api/files?category=&olderThanDays=&minSize=&dir=&cursor=` | Danh sách có phân trang (keyset) |
-| GET | `/api/files/:id/thumb` | Thumbnail (Giai đoạn 3) |
-| POST | `/api/cleanup/preview` | Chạy thử với bộ lọc → số file, tổng GB, ví dụ |
-| POST | `/api/cleanup` | Tạo job cách ly → `{ jobId }` |
-| GET | `/api/jobs`, `/api/jobs/:id/events` | Danh sách job, SSE tiến độ |
-| POST | `/api/jobs/:id/restore` | Khôi phục |
-| POST | `/api/jobs/:id/purge` | Xoá vĩnh viễn (cần xác nhận) |
+| GET | `/api/health` | Server, phiên bản, Zalo có đang chạy |
+| GET/POST/DELETE | `/api/roots` | Quản lý Media Store; `GET /api/roots/detect` gợi ý `%APPDATA%\ZaloData\media\*\ZaloDownloads` |
+| POST | `/api/scans` | Bắt đầu quét `{ rootId }` → `{ scanId }`; `GET /api/scans/:id/events` SSE |
+| GET | `/api/stats` | Tổng hợp theo loại / thư mục kho / tháng (không đếm trùng hardlink) |
+| GET | `/api/conversations` | Danh sách Conversation: bytes, bytes riêng, số item theo loại, item mới nhất |
+| PATCH | `/api/conversations/:convId` | Đặt Alias |
+| GET | `/api/items/:id/thumb` | Thumbnail (JPEG trong `Cache/` theo Message Time, hoặc ảnh gốc jpg/png/gif/webp) |
+| POST | `/api/cleanup/preview` | Preview `{ rootId, convIds?, categories, olderThanDays?, minSize? }` |
+| POST | `/api/cleanup` | Tạo Quarantine Job → kết quả |
+| GET | `/api/jobs` | Danh sách job |
+| POST | `/api/jobs/:id/restore`, `/api/jobs/:id/purge` | Restore / Purge |
 
 ---
 
 ## 7. Giao diện
 
-1. **Tổng quan** — thẻ số liệu (tổng GB, số file, GB có thể dọn), biểu đồ theo loại, cột theo tháng, bảng theo thư mục.
-2. **Duyệt file** — bộ lọc bên trái, lưới thumbnail / bảng bên phải, chọn nhiều, thanh "Đã chọn: N file, X GB".
-3. **Dọn dẹp nhanh** — các preset: "Ảnh cũ hơn 1 năm", "Video lớn hơn 50 MB", "Mọi thứ cũ hơn 2 năm" → xem trước → cách ly.
-4. **Cách ly** — danh sách job, dung lượng, ngày hết hạn, nút Khôi phục / Xoá vĩnh viễn.
-5. **Cài đặt** — thư mục gốc (gợi ý tự tìm `AppData\Local\ZaloPC`, `Zalo Received Files`, thư mục tên "Zalo" ở gốc các ổ), loại cho phép xoá, số ngày giữ cách ly.
+1. **Tổng quan** — tổng GB thật, theo loại, theo thư mục kho; nút Quét.
+2. **Hội thoại** — bảng xếp theo GB: thumbnail mới nhất, ID + cờ nhóm, ô Alias, GB riêng / GB tổng, checkbox.
+   Thanh lọc: loại (Ảnh, Video ✔ — Tài liệu, Khác ☐), cũ hơn N ngày, lớn hơn N MB → **Preview** (số file, GB, số bị bỏ qua vì dùng chung) → Cách ly.
+3. **Cách ly** — danh sách job, dung lượng, ngày hết hạn, nút Khôi phục / Xoá vĩnh viễn.
 
 ---
 
 ## 8. Lộ trình
 
-### Giai đoạn 0 — Khảo sát (½ ngày)
-- [ ] Chạy `pnpm scan "D:\<thư mục Zalo>"` (CLI có sẵn trong khung) để lấy báo cáo theo loại & thư mục.
-- [ ] Ghi lại cấu trúc thư mục thực tế vào `docs/zalo-layout.md`.
-- [ ] Thử thủ công: chuyển 100 ảnh cũ ra ngoài, mở Zalo, xem hội thoại cũ hiển thị thế nào → quyết định mức độ mạnh tay.
+### Giai đoạn 0 — Khảo sát
+- [x] Khảo sát cấu trúc thật → [zalo-layout.md](zalo-layout.md)
+- [ ] Thực nghiệm cách ly tay 1 hội thoại nhỏ (xem câu hỏi ở mục 1)
 
-### Giai đoạn 1 — Lõi quét & chỉ mục (1–2 ngày)
-- [x] `detect.ts` + test (khung đã có)
-- [x] `scan.ts` quét + ghi SQLite theo lô (khung đã có, bản đơn giản)
-- [x] Quét tăng dần (bỏ qua file không đổi), đánh dấu `missing` (khung đã có)
-- [ ] Đo hiệu năng trên dữ liệu thật; chỉnh số luồng đọc header (mặc định 64)
-- [ ] Xử lý lỗi: file bị khoá (EBUSY/EPERM), đường dẫn dài > 260 ký tự
+### Giai đoạn 1 — Lõi quét & chỉ mục
+- [x] `detect.ts` + test, giải XOR cho `fileNoise`, JPEG XL
+- [x] Mô hình Media Item / Link, quét tăng dần theo `file_key`, gắn Conversation + Message Time
+- [ ] Đo hiệu năng trên dữ liệu thật
+- [ ] Đường dẫn dài > 260 ký tự
 
-### Giai đoạn 2 — Dashboard & lọc (2–3 ngày)
-- [x] `/api/stats` cơ bản (khung đã có)
-- [ ] `/api/files` phân trang keyset + bộ lọc
-- [x] SSE tiến độ quét (khung đã có)
-- [x] UI Tổng quan cơ bản (khung đã có)
-- [ ] Biểu đồ theo tháng, trang Duyệt file (dạng bảng)
+### Giai đoạn 2 — Hội thoại & lọc
+- [x] `/api/stats` không đếm trùng, `/api/conversations`, Alias, thumbnail từ `Cache/`
+- [x] UI Hội thoại + bộ lọc
 
-### Giai đoạn 3 — Dọn dẹp an toàn (2–3 ngày) ← **mục tiêu chính**
-- [ ] `safety.ts`: kiểm tra `Zalo.exe`, allowlist loại
-- [ ] `quarantine.ts`: move cùng ổ (fallback copy+unlink nếu khác ổ), ghi `job_items` **trước** khi move
-- [ ] Khôi phục, xoá vĩnh viễn, tự hết hạn
-- [ ] UI preview → xác nhận → tiến độ → kết quả
-- [ ] Thumbnail ảnh bằng `sharp`
+### Giai đoạn 3 — Dọn dẹp an toàn ← **mục tiêu chính**
+- [x] Preview (bỏ qua Shared Media Item), Quarantine Job xử lý mọi Link, Restore tạo lại hardlink, Purge, tự Purge sau Retention
+- [x] UI Preview → Cách ly → Khôi phục / Xoá vĩnh viễn
+- [ ] Sửa `.rescache` nếu thực nghiệm Giai đoạn 0 cho thấy cần
 
 ### Giai đoạn 4 — Nâng cao (tuỳ thời gian)
 - [ ] Tìm trùng lặp (nhóm theo size → quick hash → full hash)
-- [ ] Quy tắc lưu sẵn + chạy định kỳ khi mở app
-- [ ] Thumbnail video bằng ffmpeg
-- [ ] Spike: đọc CSDL Zalo để gắn file với hội thoại
+- [ ] Quy tắc lưu sẵn + chạy khi mở app
+- [ ] Thumbnail video bằng ffmpeg; xem ảnh `.jxl`
 - [ ] Đóng gói: `start.bat` / Node SEA `.exe`
 
 ---
 
-## 9. Hiệu năng (cho vài trăm GB)
+## 9. Hiệu năng
 
 - Duyệt thư mục bằng stack lặp (không đệ quy) với `fs.readdir({ withFileTypes: true })`.
-- Chỉ đọc **32 byte đầu** mỗi file; giới hạn song song ~64 thao tác I/O.
+- Chỉ đọc **64 byte đầu** mỗi Media Item (một lần dù nhiều Link); giới hạn song song ~64 thao tác I/O.
 - Ghi SQLite theo lô 1000 dòng trong một transaction; bật `journal_mode=WAL`, `synchronous=NORMAL`.
 - Thống kê bằng `GROUP BY` có index; với hàng triệu dòng vẫn < 1 giây.
 - Cách ly = `rename` trên cùng ổ → gần như tức thời, kể cả với hàng trăm GB.
@@ -215,8 +208,10 @@ rules(id, name, filter_json, enabled, schedule)                -- Giai đoạn 4
 
 | Rủi ro | Giảm thiểu |
 |---|---|
-| Xoá nhầm file Zalo cần để chạy | Allowlist chỉ image/video, cách ly trước, kiểm tra Zalo sau khi cách ly |
+| Xoá nhầm file Zalo cần để chạy | Chỉ dọn trong Media Store, allowlist theo thư mục kho, không bao giờ dọn Thumbnail/`.rescache`/CSDL |
+| Xoá một Link mà không giải phóng byte nào | Đơn vị dọn là Media Item; xử lý mọi Link cùng lúc |
+| Ảnh vẫn được hội thoại khác dùng | Shared Media Item chỉ dọn khi mọi Conversation của nó được chọn |
 | Ảnh trong chat cũ không xem lại được | Cảnh báo rõ trong UI; giữ cách ly 7 ngày để thử |
-| Zalo cập nhật đổi cấu trúc lưu trữ | Không phụ thuộc cấu trúc — nhận diện theo nội dung |
+| Zalo cập nhật đổi cấu trúc lưu trữ | Nhận diện loại theo nội dung; gắn Conversation phụ thuộc `resource/` — xem ADR 0001 |
 | Zalo đang ghi file khi cách ly | Bắt buộc tắt Zalo |
 | Mất điện giữa chừng | `job_items` ghi trước khi move → khôi phục được |

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { detect } from "./detect.ts";
+import { detect, detectNoise } from "./detect.ts";
 
 const bytes = (...xs: (number | string)[]) => {
   const out: number[] = [];
@@ -34,6 +34,25 @@ test("BMP cần thêm bằng chứng", () => {
   assert.equal(detect(bytes("BMxx", 1, 1, 1, 1)).category, "other");
   assert.equal(detect(bytes("BMxxxx", 0, 0, 0, 0)).category, "image");
   assert.equal(detect(bytes("BMxx", 1, 1, 1, 1), ".bmp").category, "image");
+});
+
+test("JPEG XL", () => {
+  assert.deepEqual(detect(bytes(0xff, 0x0a, 0xba, 0x54)), { category: "image", kind: "jxl" });
+  assert.deepEqual(detect(bytes(0, 0, 0, 0x0c, "JXL ", 0x0d, 0x0a, 0x87, 0x0a)), { category: "image", kind: "jxl" });
+});
+
+test("ZIP không đuôi: nhận ra Office qua tên mục đầu", () => {
+  const zip = (name: string) => bytes("PK", 3, 4, ..."x".repeat(26).split(""), name);
+  assert.deepEqual(detect(zip("[Content_Types].xml")), { category: "document", kind: "office" });
+  assert.deepEqual(detect(zip("word/document.xml")), { category: "document", kind: "docx" });
+  assert.deepEqual(detect(zip("photos/a.jpg")), { category: "archive", kind: "zip" });
+});
+
+test("fileNoise: giải XOR 0x93 rồi nhận diện", () => {
+  // header thật quan sát được trong ZaloDownloads/fileNoise
+  assert.deepEqual(detectNoise(bytes(0xb6, 0xc3, 0xd7, 0xd5, 0xbe)), { category: "document", kind: "pdf" });
+  assert.deepEqual(detectNoise(bytes(0xc3, 0xd8, 0x90, 0x97)), { category: "archive", kind: "zip" });
+  assert.deepEqual(detectNoise(bytes(0xc3, 0xd8, 0x90, 0x97), ".docx"), { category: "document", kind: "docx" });
 });
 
 test("không rõ → other, giữ đuôi file", () => {

@@ -1,12 +1,13 @@
 # Zalo Cleaner
 
-Web app chạy local để **phân tích và dọn dẹp** dữ liệu ảnh/video mà Zalo PC lưu trên máy — kể cả khi tên file đã bị đổi thành chuỗi khó đọc và không bị xoá theo hội thoại.
+Web app chạy local để **dọn ảnh, video, tài liệu** mà Zalo PC tự tải về máy (`%APPDATA%\ZaloData\media\<uid>\ZaloDownloads`), **chọn theo hội thoại** và tuổi.
 
-- Nhận diện loại file **theo nội dung** (magic bytes), không phụ thuộc tên hay đuôi file
-- Chỉ mục SQLite, **quét tăng dần** — phù hợp với hàng trăm GB
-- Dọn dẹp an toàn: chạy thử → cách ly → khôi phục / xoá vĩnh viễn *(đang làm, xem kế hoạch)*
+- Nhận diện loại file **theo nội dung** (magic bytes; tài liệu trong `fileNoise` được giải XOR), xem được cả ảnh JPEG XL
+- Hiểu **hardlink** của Zalo: dung lượng không đếm trùng, dọn một file là gỡ mọi đường dẫn của nó
+- Danh sách hội thoại xếp theo dung lượng, kèm ảnh gần đây và tên tự đặt
+- Dọn dẹp an toàn: xem trước → cách ly (giữ 7 ngày) → khôi phục / xoá vĩnh viễn
 
-📄 Kế hoạch chi tiết: [`docs/PLAN.md`](docs/PLAN.md)
+📄 Kế hoạch: [`docs/PLAN.md`](docs/PLAN.md) · Thuật ngữ: [`CONTEXT.md`](CONTEXT.md) · Cấu trúc dữ liệu Zalo: [`docs/zalo-layout.md`](docs/zalo-layout.md)
 
 ## Yêu cầu
 
@@ -18,22 +19,23 @@ Web app chạy local để **phân tích và dọn dẹp** dữ liệu ảnh/vid
 ```bash
 pnpm install
 
-# Giai đoạn 0 — khảo sát nhanh bằng CLI (không xoá gì)
-pnpm scan "D:\ThuMucZalo"
+# Khảo sát nhanh bằng CLI (chỉ đọc, không xoá gì) — tự tìm thư mục ZaloDownloads
+pnpm scan
 
 # Chạy web app: API http://127.0.0.1:5174, UI http://127.0.0.1:5173
 pnpm dev
 ```
 
-> Lần đầu quét hàng trăm GB có thể mất vài phút. Các lần sau chỉ xử lý file mới/thay đổi.
+> Quét ~35 nghìn file / 15 GB mất vài giây. Các lần sau chỉ đọc lại file mới/thay đổi.
 
 ## Cấu trúc
 
 ```
-packages/core   Logic: detect, scan, db, stats, safety, quarantine
+packages/core   Logic: layout, detect, scan, db, stats, thumbs/jxl, safety, quarantine
 apps/server     Hono API (chỉ lắng nghe 127.0.0.1)
 apps/web        Vite + React UI
-docs/PLAN.md    Kế hoạch & lộ trình
+docs/           Kế hoạch, cấu trúc dữ liệu Zalo, ADR
+CONTEXT.md      Thuật ngữ
 ```
 
 ## Lệnh
@@ -41,13 +43,15 @@ docs/PLAN.md    Kế hoạch & lộ trình
 | Lệnh | Mô tả |
 |---|---|
 | `pnpm dev` | Chạy server + web ở chế độ dev |
-| `pnpm scan <dir> [--db file]` | Quét thư mục và in báo cáo |
+| `pnpm scan [dir] [--db file]` | Quét Media Store và in báo cáo (theo loại, thư mục kho, hội thoại) |
 | `pnpm test` | Chạy test |
 | `pnpm typecheck` | Kiểm tra kiểu |
 
-Biến môi trường server: `PORT` (mặc định 5174), `ZC_DATA_DIR` (mặc định `./data`).
+Biến môi trường server: `PORT` (mặc định 5174), `ZC_DATA_DIR` (mặc định `./data`), `ZC_QUARANTINE_DIR` (mặc định `%APPDATA%\zalo-cleaner\quarantine`, phải cùng ổ với ZaloData).
 
 ## Lưu ý an toàn
 
-- Chưa có chức năng xoá trong bản khung này. Khi cài đặt (Giai đoạn 3), luôn **tắt Zalo** trước khi dọn dẹp.
-- Ảnh/video bị xoá khỏi cache có thể không xem lại được trong các hội thoại cũ.
+- Phải **thoát hẳn Zalo** trước khi cách ly / khôi phục — app tự kiểm tra và từ chối nếu Zalo đang chạy.
+- Cách ly chưa giải phóng dung lượng; chỉ khi xoá vĩnh viễn (bấm tay hoặc sau 7 ngày) ổ đĩa mới trống ra.
+- Ảnh/video đã xoá có thể không xem lại được trong hội thoại cũ. **Chưa thực nghiệm** Zalo phản ứng thế nào — xem mục "Thực nghiệm" trong [`docs/zalo-layout.md`](docs/zalo-layout.md); nên thử trước với một hội thoại nhỏ.
+- Không bao giờ đụng tới thumbnail (`Cache/`…), `.rescache`, CSDL, hay file ngoài ZaloDownloads.

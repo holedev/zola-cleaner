@@ -4,6 +4,8 @@ import path from "node:path";
 
 export type Db = DatabaseSync;
 
+const SCHEMA_VERSION = 2;
+
 const SCHEMA = /* sql */ `
 CREATE TABLE IF NOT EXISTS roots (
   id          INTEGER PRIMARY KEY,
@@ -12,25 +14,46 @@ CREATE TABLE IF NOT EXISTS roots (
   created_at  INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS files (
+-- Media Item = một file vật lý (định danh bằng dev + ino). Một Media Item có nhiều Link (hardlink).
+CREATE TABLE IF NOT EXISTS items (
   id            INTEGER PRIMARY KEY,
   root_id       INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
-  rel_path      TEXT NOT NULL,          -- luôn dùng "/" làm dấu phân cách
+  file_key      TEXT NOT NULL,          -- "<dev>:<ino>"
   size          INTEGER NOT NULL,
   mtime_ms      INTEGER NOT NULL,
+  msg_ts        INTEGER,                -- Message Time (ms), lấy từ tên Link trong resource/
+  area          TEXT NOT NULL,          -- thư mục kho: picture | video | fileNoise | file | Cache | ...
   category      TEXT NOT NULL,
   kind          TEXT NOT NULL,
-  top_dir       TEXT NOT NULL,          -- 1–2 cấp thư mục đầu, để thống kê nhanh
   quick_hash    TEXT,
   full_hash     TEXT,
   seen_scan_id  INTEGER NOT NULL,
   status        TEXT NOT NULL DEFAULT 'present', -- present | quarantined | deleted | missing
+  UNIQUE (root_id, file_key)
+);
+CREATE INDEX IF NOT EXISTS idx_items_category ON items(status, category);
+CREATE INDEX IF NOT EXISTS idx_items_area     ON items(status, area);
+CREATE INDEX IF NOT EXISTS idx_items_size     ON items(status, size);
+
+CREATE TABLE IF NOT EXISTS links (
+  id            INTEGER PRIMARY KEY,
+  item_id       INTEGER NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  root_id       INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
+  rel_path      TEXT NOT NULL,          -- luôn dùng "/" làm dấu phân cách
+  conv_id       TEXT,                   -- Conversation (chỉ Link trong resource/<convId>/)
+  seen_scan_id  INTEGER NOT NULL,
   UNIQUE (root_id, rel_path)
 );
-CREATE INDEX IF NOT EXISTS idx_files_category ON files(status, category);
-CREATE INDEX IF NOT EXISTS idx_files_mtime    ON files(status, mtime_ms);
-CREATE INDEX IF NOT EXISTS idx_files_size     ON files(status, size);
-CREATE INDEX IF NOT EXISTS idx_files_top_dir  ON files(status, top_dir);
+CREATE INDEX IF NOT EXISTS idx_links_item ON links(item_id);
+CREATE INDEX IF NOT EXISTS idx_links_conv ON links(root_id, conv_id, item_id);
+
+-- Chỉ chứa dữ liệu người dùng (Alias); số liệu luôn tính từ links + items.
+CREATE TABLE IF NOT EXISTS conversations (
+  root_id   INTEGER NOT NULL REFERENCES roots(id) ON DELETE CASCADE,
+  conv_id   TEXT NOT NULL,
+  alias     TEXT,
+  PRIMARY KEY (root_id, conv_id)
+);
 
 CREATE TABLE IF NOT EXISTS scans (
   id             INTEGER PRIMARY KEY,
@@ -46,27 +69,29 @@ CREATE TABLE IF NOT EXISTS scans (
   error          TEXT
 );
 
--- Giai đoạn 3: dọn dẹp an toàn
+-- Quarantine Job
 CREATE TABLE IF NOT EXISTS jobs (
   id              INTEGER PRIMARY KEY,
-  type            TEXT NOT NULL,        -- quarantine | restore | purge
+  root_id         INTEGER NOT NULL REFERENCES roots(id),
   filter_json     TEXT,
-  status          TEXT NOT NULL,        -- pending | running | done | failed
+  status          TEXT NOT NULL,        -- running | quarantined | restored | purged | failed
   created_at      INTEGER NOT NULL,
   finished_at     INTEGER,
-  file_count      INTEGER NOT NULL DEFAULT 0,
+  expires_at      INTEGER NOT NULL,     -- hết Retention → tự Purge
+  item_count      INTEGER NOT NULL DEFAULT 0,
   total_bytes     INTEGER NOT NULL DEFAULT 0,
-  quarantine_dir  TEXT
+  quarantine_dir  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS job_items (
-  job_id     INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
-  file_id    INTEGER NOT NULL REFERENCES files(id),
-  from_path  TEXT NOT NULL,
-  to_path    TEXT NOT NULL,
-  state      TEXT NOT NULL,             -- pending | moved | restored | purged | failed
-  error      TEXT,
-  PRIMARY KEY (job_id, file_id)
+  job_id           INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+  item_id          INTEGER NOT NULL REFERENCES items(id),
+  links_json       TEXT NOT NULL,       -- mọi Link (đường dẫn tuyệt đối) của Media Item lúc cách ly
+  quarantine_path  TEXT NOT NULL,
+  size             INTEGER NOT NULL,
+  state            TEXT NOT NULL,       -- pending | moved | restored | purged | failed
+  error            TEXT,
+  PRIMARY KEY (job_id, item_id)
 );
 `;
 
@@ -78,7 +103,16 @@ export function openDb(file: string): Db {
     PRAGMA synchronous = NORMAL;
     PRAGMA foreign_keys = ON;
   `);
+  // Chỉ mục dựng lại được bằng cách quét lại → đổi schema thì xoá bảng cũ, không cần migration.
+  const version = (db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version;
+  if (version < SCHEMA_VERSION) {
+    db.exec(`
+      DROP TABLE IF EXISTS job_items; DROP TABLE IF EXISTS jobs; DROP TABLE IF EXISTS files;
+      DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS items; DROP TABLE IF EXISTS scans;
+    `);
+  }
   db.exec(SCHEMA);
+  db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
   return db;
 }
 
