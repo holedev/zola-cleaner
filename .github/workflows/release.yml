@@ -1,0 +1,42 @@
+name: Release
+
+# Đẩy tag vX.Y.Z (khớp version trong apps/desktop/src-tauri/tauri.conf.json) để build file cài
+# và tạo bản nháp Release. Kiểm tra bản nháp rồi bấm Publish — app đã cài mới thấy bản cập nhật.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: pnpm install --frozen-lockfile
+      - run: cargo test --workspace
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Khoá ký bản cập nhật (tauri signer generate); khoá công khai nằm trong tauri.conf.json
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop
+          tauriScript: pnpm tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: Zola Cleaner ${{ github.ref_name }}
+          releaseBody: |
+            Tải `Zola.Cleaner_*_x64-setup.exe` bên dưới và mở để cài (không cần quyền quản trị).
+            App chưa được ký số: nếu Windows hiện "Windows protected your PC", bấm **More info → Run anyway**.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
