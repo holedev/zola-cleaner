@@ -37,7 +37,8 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup, onBrowse }: Props
   const maxBytes = useMemo(() => Math.max(1, ...list.map((s) => s.bytes)), [list]);
 
   return (
-    <div className="grid gap-10">
+    // Một cột cùng độ rộng: thanh dung lượng và danh sách cách dọn thẳng hàng, màn hình rộng thì căn giữa
+    <div className="mx-auto grid w-full max-w-5xl gap-10">
       <section className="grid gap-5">
         {!disk.data || !stats.data ? (
           <div className="grid gap-3">
@@ -75,7 +76,7 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup, onBrowse }: Props
         )}
       </section>
 
-      <section className="grid max-w-4xl gap-4">
+      <section className="grid gap-4">
         <div className="flex items-baseline justify-between gap-4">
           <h2 className="text-lg font-semibold">Chọn cách dọn</h2>
           <button
