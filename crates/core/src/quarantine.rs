@@ -106,6 +106,17 @@ pub fn default_quarantine_base(app_data: &Path) -> PathBuf {
     app_data.join("zola-cleaner").join("quarantine")
 }
 
+/// Thư mục thùng rác cho một Media Store: phải cùng ổ (dọn = đổi tên file, không chép).
+/// Cùng ổ với `default_base` (thường là ổ C, %APPDATA%) → dùng `default_base`;
+/// dữ liệu Zalo đã chuyển sang ổ khác → `<ổ đó>\ZolaCleaner\trash`.
+pub fn quarantine_base_for(store: &Path, default_base: &Path) -> PathBuf {
+    if drive_of(store) == drive_of(default_base) {
+        return default_base.to_path_buf();
+    }
+    let drive_root: PathBuf = store.components().take(2).collect(); // "D:" + "\"
+    drive_root.join("ZolaCleaner").join("trash")
+}
+
 pub(crate) fn abs_of(root: &Path, rel_path: &str) -> PathBuf {
     rel_path
         .split('/')

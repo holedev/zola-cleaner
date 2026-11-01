@@ -786,3 +786,40 @@ fn tu_choi_zip_co_duong_dan_ra_ngoai() {
             .exists()
     );
 }
+
+#[test]
+fn tim_du_lieu_zalo_da_chuyen_sang_o_khac() {
+    use zc_core::layout::{detect_accounts_in, detect_media_stores_in, media_dirs};
+    let app = tempfile::tempdir().unwrap();
+    let drive_d = tempfile::tempdir().unwrap(); // giả lập ổ D:\
+    fs::create_dir_all(app.path().join("ZaloData/media/111/ZaloDownloads")).unwrap();
+    fs::create_dir_all(drive_d.path().join("Zalo Data/media/222/ZaloDownloads")).unwrap();
+    fs::create_dir_all(app.path().join("ZaloData/Database/_production/222")).unwrap();
+
+    let dirs = media_dirs(app.path(), &[drive_d.path().to_path_buf()]);
+    let stores = detect_media_stores_in(&dirs);
+    assert_eq!(stores.len(), 2);
+    assert!(stores.iter().any(|s| s.starts_with(drive_d.path())));
+    let acc = detect_accounts_in(app.path(), &dirs);
+    let a222 = acc.iter().find(|a| a.uid == "222").unwrap();
+    assert!(
+        a222.store
+            .as_ref()
+            .unwrap()
+            .starts_with(drive_d.path().join("Zalo Data"))
+    );
+}
+
+#[test]
+fn thung_rac_cung_o_voi_du_lieu_zalo() {
+    use std::path::Path;
+    use zc_core::quarantine::quarantine_base_for;
+    let default = Path::new(r"C:\Users\an\AppData\Roaming\zola-cleaner\quarantine");
+    let on_c = Path::new(r"C:\Users\an\AppData\Roaming\ZaloData\media\1\ZaloDownloads");
+    let on_d = Path::new(r"D:\Zalo Data\media\1\ZaloDownloads");
+    assert_eq!(quarantine_base_for(on_c, default), default);
+    assert_eq!(
+        quarantine_base_for(on_d, default),
+        Path::new(r"D:\ZolaCleaner\trash")
+    );
+}

@@ -88,6 +88,15 @@ impl AppState {
     fn job_options(&self) -> JobOptions {
         JobOptions::new(self.paths.quarantine.clone())
     }
+    /// Thùng rác cùng ổ với Media Store (dữ liệu Zalo có thể đã được chuyển sang ổ khác).
+    fn job_options_for(&self, db: &db::Db, root_id: i64) -> CmdResult<JobOptions> {
+        let root = db::get_root(db, root_id)?
+            .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
+        Ok(JobOptions::new(quarantine::quarantine_base_for(
+            Path::new(&root.path),
+            &self.paths.quarantine,
+        )))
+    }
 }
 
 /// Chạy việc chặn (I/O, SQLite) trên pool riêng để không đứng UI.
@@ -185,11 +194,14 @@ struct RootInfo {
     root: Root,
     uid: Option<String>,
     layout: LayoutCheck,
+    /// Thư mục còn tồn tại không (Zalo có thể đã chuyển dữ liệu sang ổ khác).
+    exists: bool,
 }
 
 fn root_info(root: Root) -> RootInfo {
     let path = PathBuf::from(&root.path);
     RootInfo {
+        exists: path.is_dir(),
         uid: layout::account_uid(&path),
         layout: layout::check_layout(&path),
         root,
@@ -206,6 +218,17 @@ async fn roots(state: AppStateRef<'_>) -> CmdResult<Vec<RootInfo>> {
             .collect())
     })
     .await
+}
+
+/// Đặt tên dễ nhớ cho một tài khoản Zalo (rỗng = bỏ tên).
+#[tauri::command]
+async fn set_root_label(
+    state: AppStateRef<'_>,
+    root_id: i64,
+    label: Option<String>,
+) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || Ok(db::set_root_label(&s.db()?, root_id, label.as_deref())?)).await
 }
 
 #[tauri::command]
@@ -391,7 +414,7 @@ async fn quarantine(state: AppStateRef<'_>, filter: CleanupFilter) -> CmdResult<
     exclusive(state.inner(), move |s| {
         let db = s.db()?;
         assert_supported(&db, filter.root_id)?;
-        let r = quarantine::quarantine(&db, &filter, &s.job_options())?;
+        let r = quarantine::quarantine(&db, &filter, &s.job_options_for(&db, filter.root_id)?)?;
         log::info!(
             "Cách ly job #{}: {} file, {} byte, {} lỗi",
             r.job_id,
@@ -530,18 +553,15 @@ async fn import_backup(
 ) -> CmdResult<ArchiveResult> {
     exclusive(state.inner(), move |s| {
         let db = s.db()?;
-        let work = s.paths.quarantine.join(format!("import-{}", db::now_ms()));
+        // Giải nén vào thư mục cùng ổ với dữ liệu Zalo để đặt file về chỗ cũ bằng đổi tên
+        let opts = s.job_options_for(&db, root_id)?;
+        let work = opts
+            .quarantine_base
+            .join(format!("import-{}", db::now_ms()));
         let progress = |done, total| {
             let _ = app.emit("archive-progress", ArchiveProgress { done, total });
         };
-        let r = archive::import_backup(
-            &db,
-            root_id,
-            Path::new(&path),
-            &work,
-            &s.job_options(),
-            &progress,
-        )?;
+        let r = archive::import_backup(&db, root_id, Path::new(&path), &work, &opts, &progress)?;
         log::info!(
             "Nhập lại sao lưu: {} file, {} bỏ qua, {} lỗi",
             r.files,
@@ -774,6 +794,7 @@ pub fn run() {
             take_auto_purged,
             take_new_accounts,
             accounts,
+            set_root_label,
             roots,
             add_root,
             start_scan,

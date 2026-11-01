@@ -213,6 +213,16 @@ pub fn add_root(db: &Db, dir: &Path, label: Option<&str>) -> Result<Root> {
     )?)
 }
 
+/// Tên dễ nhớ do người dùng đặt cho tài khoản (Media Store). Rỗng → bỏ tên.
+pub fn set_root_label(db: &Db, id: i64, label: Option<&str>) -> Result<()> {
+    let label = label.map(str::trim).filter(|l| !l.is_empty());
+    db.execute(
+        "UPDATE roots SET label = ? WHERE id = ?",
+        params![label, id],
+    )?;
+    Ok(())
+}
+
 pub fn remove_root(db: &Db, id: i64) -> Result<()> {
     db.execute("DELETE FROM roots WHERE id = ?", [id])?;
     Ok(())

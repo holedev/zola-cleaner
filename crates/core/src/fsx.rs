@@ -159,6 +159,36 @@ mod imp {
     }
 }
 
+/// Gốc các ổ đĩa cố định / rời đang gắn (`C:\`, `D:\`…) — nơi Zalo có thể đã chuyển dữ liệu sang.
+#[cfg(windows)]
+pub fn drives() -> Vec<std::path::PathBuf> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    const DRIVE_REMOVABLE: u32 = 2;
+    const DRIVE_FIXED: u32 = 3;
+    let mask = unsafe { GetLogicalDrives() };
+    (0..26u8)
+        .filter(|i| mask & (1 << i) != 0)
+        .map(|i| std::path::PathBuf::from(format!("{}:\\", (b'A' + i) as char)))
+        .filter(|root| {
+            let wide: Vec<u16> = root
+                .as_os_str()
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            matches!(
+                unsafe { GetDriveTypeW(wide.as_ptr()) },
+                DRIVE_FIXED | DRIVE_REMOVABLE
+            )
+        })
+        .collect()
+}
+
+#[cfg(not(windows))]
+pub fn drives() -> Vec<std::path::PathBuf> {
+    Vec::new()
+}
+
 /// Dung lượng ổ chứa `path`: (còn trống cho người dùng hiện tại, tổng), byte.
 #[cfg(windows)]
 pub fn disk_space(path: &Path) -> io::Result<(u64, u64)> {

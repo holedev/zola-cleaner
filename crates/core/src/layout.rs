@@ -80,21 +80,49 @@ pub fn is_group_conversation(conv_id: &str) -> bool {
     conv_id.strip_prefix('g').is_some_and(all_digits)
 }
 
-/// Tìm các Media Store trên máy: `<appData>\ZaloData\media\<uid>\ZaloDownloads`.
-pub fn detect_media_stores(app_data: &Path) -> Vec<PathBuf> {
-    let media = app_data.join("ZaloData").join("media");
-    let Ok(entries) = std::fs::read_dir(&media) else {
-        return Vec::new();
-    };
-    let mut stores: Vec<PathBuf> = entries
+/// Thư mục Zalo tạo khi người dùng chuyển "Vị trí lưu trữ" sang ổ khác: `<ổ>\Zalo Data\media\<uid>\ZaloDownloads`
+/// (Zalo chỉ cho chuyển sang ổ khác ổ mặc định; config.json vẫn ở `%APPDATA%\ZaloData`).
+pub const MOVED_DATA_DIR: &str = "Zalo Data";
+
+/// Các thư mục `media` có thể chứa Media Store: mặc định `<appData>\ZaloData\media`, và `<ổ>\Zalo Data\media` trên các ổ.
+pub fn media_dirs(app_data: &Path, drives: &[PathBuf]) -> Vec<PathBuf> {
+    let mut dirs = vec![app_data.join("ZaloData").join("media")];
+    dirs.extend(drives.iter().map(|d| d.join(MOVED_DATA_DIR).join("media")));
+    dirs.retain(|d| d.is_dir());
+    dirs
+}
+
+/// uid (thư mục toàn chữ số) trong một thư mục.
+fn uids_in(dir: &Path) -> Vec<String> {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-        .filter(|e| e.file_name().to_str().is_some_and(all_digits))
-        .map(|e| e.path().join("ZaloDownloads"))
+        .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+        .filter(|n| all_digits(n))
+        .collect()
+}
+
+/// Media Store trong các thư mục `media` cho trước.
+pub fn detect_media_stores_in(media_dirs: &[PathBuf]) -> Vec<PathBuf> {
+    let mut stores: Vec<PathBuf> = media_dirs
+        .iter()
+        .flat_map(|m| {
+            uids_in(m)
+                .into_iter()
+                .map(move |uid| m.join(uid).join("ZaloDownloads"))
+        })
         .filter(|p| p.is_dir())
         .collect();
     stores.sort();
+    stores.dedup();
     stores
+}
+
+/// Tìm mọi Media Store trên máy, kể cả khi người dùng đã chuyển dữ liệu Zalo sang ổ khác.
+pub fn detect_media_stores(app_data: &Path) -> Vec<PathBuf> {
+    detect_media_stores_in(&media_dirs(app_data, &crate::fsx::drives()))
 }
 
 /// Một Account Zalo đã từng đăng nhập trên máy.
@@ -102,34 +130,32 @@ pub fn detect_media_stores(app_data: &Path) -> Vec<PathBuf> {
 #[serde(rename_all = "camelCase")]
 pub struct AccountInfo {
     pub uid: String,
-    /// Media Store của Account, nếu Zalo đã tạo (`media\<uid>\ZaloDownloads`).
+    /// Media Store của Account, nếu Zalo đã tạo (`media\<uid>\ZaloDownloads`, ở ổ mặc định hoặc ổ đã chuyển sang).
     pub store: Option<PathBuf>,
 }
 
 /// Mọi Account trên máy: có thư mục media và / hoặc CSDL (`Database\_production\<uid>`).
 pub fn detect_accounts(app_data: &Path) -> Vec<AccountInfo> {
-    let zalo = app_data.join("ZaloData");
-    let uids_in = |dir: PathBuf| -> Vec<String> {
-        std::fs::read_dir(dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
-            .filter(|n| all_digits(n))
-            .collect()
-    };
-    let mut uids = uids_in(zalo.join("media"));
-    uids.extend(uids_in(zalo.join("Database").join("_production")));
+    detect_accounts_in(app_data, &media_dirs(app_data, &crate::fsx::drives()))
+}
+
+pub fn detect_accounts_in(app_data: &Path, media_dirs: &[PathBuf]) -> Vec<AccountInfo> {
+    let mut uids: Vec<String> = media_dirs.iter().flat_map(|m| uids_in(m)).collect();
+    uids.extend(uids_in(
+        &app_data
+            .join("ZaloData")
+            .join("Database")
+            .join("_production"),
+    ));
     uids.sort();
     uids.dedup();
     uids.into_iter()
         .map(|uid| {
-            let store = zalo.join("media").join(&uid).join("ZaloDownloads");
-            AccountInfo {
-                store: store.is_dir().then_some(store),
-                uid,
-            }
+            let store = media_dirs
+                .iter()
+                .map(|m| m.join(&uid).join("ZaloDownloads"))
+                .find(|s| s.is_dir());
+            AccountInfo { store, uid }
         })
         .collect()
 }
@@ -163,7 +189,7 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     if account_uid(store).is_none()
         || store.file_name().and_then(|n| n.to_str()) != Some("ZaloDownloads")
     {
-        reasons.push("Thư mục không có dạng ZaloData\\media\\<uid>\\ZaloDownloads".to_owned());
+        reasons.push("Thư mục không có dạng ...\\media\\<uid>\\ZaloDownloads".to_owned());
     }
     for dir in ["picture", "resource"] {
         if !store.join(dir).is_dir() {
@@ -172,10 +198,16 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     }
 
     // ZaloData\config.json: Zalo 5.x, đã chuyển media sang vị trí mới
+    // ZaloData\config.json nằm cạnh media\ (mặc định) — hoặc vẫn ở %APPDATA%\ZaloData nếu dữ liệu đã chuyển ổ
     let config = store
         .ancestors()
         .nth(3)
-        .map(|zalo_data| zalo_data.join("config.json"));
+        .map(|zalo_data| zalo_data.join("config.json"))
+        .into_iter()
+        .chain(
+            std::env::var_os("APPDATA").map(|a| Path::new(&a).join("ZaloData").join("config.json")),
+        )
+        .find(|c| c.is_file());
     match config
         .and_then(|c| std::fs::read_to_string(c).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())

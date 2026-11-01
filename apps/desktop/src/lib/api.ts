@@ -10,7 +10,13 @@ export interface RootInfo {
   createdAt: number;
   uid: string | null;
   layout: LayoutCheck;
+  /** Thư mục còn tồn tại không (Zalo có thể đã chuyển dữ liệu sang ổ khác). */
+  exists: boolean;
 }
+
+/** Tên hiển thị của tài khoản: tên tự đặt, nếu không thì "Tài khoản …6410". */
+export const accountName = (r: { label: string | null; uid: string | null; id?: number }) =>
+  r.label || (r.uid ? `Tài khoản …${r.uid.slice(-4)}` : `Tài khoản #${r.id ?? "?"}`);
 
 export interface AccountInfo {
   uid: string;
@@ -202,6 +208,7 @@ export const api = {
   accounts: () => call<AccountInfo[]>("accounts"),
   roots: () => call<RootInfo[]>("roots"),
   addRoot: (path: string) => call<RootInfo>("add_root", { path }),
+  setRootLabel: (rootId: number, label: string | null) => call<void>("set_root_label", { rootId, label }),
   startScan: (rootId: number) => call<void>("start_scan", { rootId }),
   stats: (rootId: number) => call<Stats>("stats", { rootId }),
   suggestions: (rootId: number) => call<Suggestion[]>("suggestions", { rootId }),

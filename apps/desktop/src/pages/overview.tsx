@@ -1,11 +1,13 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, FileDown, FolderPlus, ScrollText, TriangleAlert } from "lucide-react";
+import { CircleCheck, FileDown, FolderPlus, FolderX, ScrollText, TriangleAlert } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { api, AREA_LABEL, type Bucket, CATEGORY_LABEL, errorMessage, formatBytes, type RootInfo, shortUid } from "@/lib/api";
@@ -70,7 +72,11 @@ export function OverviewPage({ rootId }: { rootId: number }) {
         <CardContent className="grid gap-3">
           {roots.data?.map((r) => (
             <div key={r.id} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-              {r.layout.status === "supported" ? (
+              {!r.exists ? (
+                <Badge variant="outline" className="text-muted-foreground">
+                  <FolderX /> Không còn ở đây
+                </Badge>
+              ) : r.layout.status === "supported" ? (
                 <Badge variant="secondary">
                   <CircleCheck /> Hỗ trợ
                 </Badge>
@@ -79,16 +85,20 @@ export function OverviewPage({ rootId }: { rootId: number }) {
                   <TriangleAlert /> Chỉ xem
                 </Badge>
               )}
-              <span className="font-medium">Tài khoản {shortUid(r.uid)}</span>
+              <AccountLabel root={r} />
               <div className="min-w-0 flex-1">
                 <div className="text-muted-foreground truncate font-mono text-xs" title={r.path}>
-                  {r.path}
+                  {shortUid(r.uid)} · {r.path}
                 </div>
-                {r.layout.status === "unsupported" && (
+                {!r.exists ? (
+                  <div className="text-muted-foreground text-xs">
+                    Thư mục này không còn — có thể bạn đã đổi "Vị trí lưu trữ" của Zalo sang ổ khác. App tự tìm vị trí mới mỗi lần mở.
+                  </div>
+                ) : r.layout.status === "unsupported" && (
                   <div className="text-muted-foreground text-xs">{r.layout.reasons.join(" · ")}</div>
                 )}
               </div>
-              <Button variant="outline" size="sm" onClick={() => exportReport(r)}>
+              <Button variant="outline" size="sm" disabled={!r.exists} onClick={() => exportReport(r)}>
                 <FileDown /> Xuất báo cáo cấu trúc
               </Button>
             </div>
@@ -119,6 +129,33 @@ export function OverviewPage({ rootId }: { rootId: number }) {
         Zola Cleaner là phần mềm mã nguồn mở độc lập, không liên kết với Zalo hay VNG.
       </p>
     </div>
+  );
+}
+
+/** Ô đặt tên dễ nhớ cho tài khoản (lưu khi rời ô hoặc nhấn Enter). */
+function AccountLabel({ root }: { root: RootInfo }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(root.label ?? "");
+  useEffect(() => setValue(root.label ?? ""), [root.label]);
+  const save = async () => {
+    if ((root.label ?? "") === value.trim()) return;
+    try {
+      await api.setRootLabel(root.id, value.trim() || null);
+      await qc.invalidateQueries({ queryKey: keys.roots });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  return (
+    <Input
+      className="h-8 w-56 font-medium"
+      value={value}
+      placeholder={`Đặt tên (vd. "Zalo công việc")`}
+      title="Tên dễ nhớ cho tài khoản này, chỉ lưu trong Zola Cleaner"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
   );
 }
 

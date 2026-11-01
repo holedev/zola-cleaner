@@ -8,6 +8,19 @@ Máy khảo sát: Zalo PC 5.x, đã migrate sang layout mới, một tài khoả
 - `AppData\Local\ZaloPC` **không tồn tại** trên máy này; `Documents\Zalo Received Files` rỗng.
 - `D:\Zalo` (~1 GB) là file người dùng chủ động "Lưu về máy" (pdf/docx) — không phải cache, app không đụng.
 
+## Khi người dùng đổi "Vị trí lưu trữ" (Cài đặt → Quản lý dữ liệu → Thay đổi)
+
+Đọc từ mã của Zalo PC 26.10 (`resources\app.asar`, module `IpzU`, `GSxB`, `H/Jn`), chưa thử chuyển thật:
+
+- Zalo chỉ cho chọn **ổ đĩa khác** ổ mặc định. Thư mục media mới: `<ổ>:\Zalo Data\media\<uid>\ZaloDownloads`
+  (`getZaloPCDirFromDrive`: cùng ổ mặc định → giữ `%APPDATA%\ZaloData\media`, khác ổ → `<ổ>\Zalo Data\media`).
+  CSDL tin nhắn có thể chuyển theo sang `<ổ>\Zalo Data\message`.
+- Ổ đang dùng lưu trong kho cấu hình của Zalo, khoá `resource.location.path` / `.label`, và được ghi vào registry
+  (`HKCU\Software\vng.zalo.pc`, máy khảo sát chưa từng chuyển nên chưa có giá trị).
+- `config.json` vẫn ở `%APPDATA%\ZaloData`.
+- Zola Cleaner: mỗi lần mở dò `%APPDATA%\ZaloData\media` và `<mọi ổ cố định / rời>\Zalo Data\media`; thùng rác đặt cùng ổ
+  với dữ liệu (`<ổ>\ZolaCleaner\trash` nếu khác ổ C) vì dọn = đổi tên file. Thư mục cũ biến mất → đánh dấu "Không còn ở đây".
+
 ## `ZaloData\` cấp 1
 
 | Mục | Dung lượng | Ghi chú |

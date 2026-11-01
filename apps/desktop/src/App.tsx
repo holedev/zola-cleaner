@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
+import { accountName, api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
 import { keys, useHealth, useInvalidateIndex, useRoots } from "@/lib/queries";
 import { ConversationsPage } from "@/pages/conversations";
 import { JobsPage } from "@/pages/jobs";
@@ -51,12 +51,17 @@ export default function App() {
   const [closeAsk, setCloseAsk] = useState<{ bytes: number; jobIds: number[] } | null>(null);
 
   const root = roots.data?.find((r) => r.id === rootId);
-  const readOnly = root?.layout.status !== "supported";
+  const readOnly = root?.layout.status !== "supported" || !root?.exists;
+  /** Thư mục còn trên máy (Zalo có thể đã chuyển dữ liệu sang ổ khác → thư mục cũ biến mất). */
+  const liveRoots = (roots.data ?? []).filter((r) => r.exists);
 
   // Chọn sẵn Media Store đầu tiên được hỗ trợ
   useEffect(() => {
     if (rootId == null && roots.data?.length) {
-      setRootId((roots.data.find((r) => r.layout.status === "supported") ?? roots.data[0]!).id);
+      setRootId(
+        (roots.data.find((r) => r.exists && r.layout.status === "supported") ?? roots.data.find((r) => r.exists) ?? roots.data[0]!)
+          .id,
+      );
     }
   }, [roots.data, rootId]);
 
@@ -165,23 +170,26 @@ export default function App() {
     <main className="mx-auto grid w-full max-w-[1920px] gap-5 px-6 py-5 2xl:px-10">
       <header className="flex flex-wrap items-center gap-4">
         <h1 className="text-xl font-semibold tracking-tight">Zola Cleaner</h1>
-        {roots.data.length > 1 && (
+        {liveRoots.length > 1 && (
           <Select value={String(rootId)} onValueChange={(v) => setRootId(Number(v))}>
             <SelectTrigger className="w-64">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {roots.data.map((r) => (
+              {liveRoots.map((r) => (
                 <SelectItem key={r.id} value={String(r.id)}>
-                  Tài khoản {r.uid ? shortUid(r.uid) : `#${r.id}`}
+                  {accountName(r)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         )}
-        {roots.data.length === 1 && root && (
-          <Badge variant="outline" title="Tài khoản Zalo đang xem. Có tài khoản khác đăng nhập trên máy thì app tự phát hiện.">
-            Tài khoản {shortUid(root.uid)}
+        {liveRoots.length <= 1 && root && (
+          <Badge
+            variant="outline"
+            title="Tài khoản Zalo đang xem. Đặt tên ở tab Tổng quan. Có tài khoản khác đăng nhập trên máy thì app tự phát hiện."
+          >
+            {accountName(root)}
           </Badge>
         )}
         <div className="flex-1" />
