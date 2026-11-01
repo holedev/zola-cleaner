@@ -1,4 +1,4 @@
-import { CalendarRange, Search } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Search, User, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
@@ -34,6 +34,16 @@ const AGES = [
   { days: 730, label: "Cũ hơn 2 năm" },
 ];
 
+type SortKey = "name" | "bytes" | "cleanable" | "lastTs";
+type Sort = { key: SortKey; desc: boolean };
+
+const SORT_VALUE: Record<SortKey, (c: Conversation) => number | string> = {
+  name: (c) => (c.alias || c.convId).toLowerCase(),
+  bytes: (c) => c.bytes,
+  cleanable: (c) => c.cleanableBytes,
+  lastTs: (c) => c.lastTs ?? 0,
+};
+
 const COLORS = { image: "bg-blue-500", video: "bg-orange-500", document: "bg-emerald-600", other: "bg-zinc-400" };
 
 interface Props {
@@ -50,6 +60,10 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const [allConvs, setAllConvs] = useState(false);
   const [query, setQuery] = useState("");
   const [monthsFor, setMonthsFor] = useState<Conversation | null>(null);
+  const [sort, setSort] = useState<Sort>({ key: "bytes", desc: true });
+  const sortBy = (key: SortKey) =>
+    // Bấm lại cột đang sắp → đảo chiều; cột mới → tên A→Z, số liệu lớn → nhỏ
+    setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" }));
 
   const rawBase: CleanupFilter = useMemo(() => {
     const mb = Number(minSizeMb);
@@ -79,9 +93,16 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const rows = convs.data ?? [];
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? rows.filter((c) => c.convId.includes(q) || c.alias?.toLowerCase().includes(q)) : rows;
-  }, [rows, query]);
-  const max = rows[0]?.bytes ?? 1;
+    const list = q ? rows.filter((c) => c.convId.includes(q) || c.alias?.toLowerCase().includes(q)) : [...rows];
+    const value = SORT_VALUE[sort.key];
+    list.sort((a, b) => {
+      const [x, y] = [value(a), value(b)];
+      const cmp = typeof x === "string" ? x.localeCompare(y as string, "vi") : x - (y as number);
+      return sort.desc ? -cmp : cmp;
+    });
+    return list;
+  }, [rows, query, sort]);
+  const max = Math.max(1, ...rows.map((c) => c.bytes));
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -194,16 +215,21 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
               <TableHead className="w-10">
                 <Checkbox disabled={allConvs} checked={allConvs || allShownOn} onCheckedChange={toggleShown} />
               </TableHead>
-              <TableHead>Hội thoại</TableHead>
+              <SortHead label="Hội thoại" k="name" sort={sort} onSort={sortBy} />
               <TableHead>Ảnh gần đây</TableHead>
-              <TableHead className="text-right">Tổng</TableHead>
-              <TableHead className="text-right" title="Phần chỉ thuộc hội thoại này, khớp bộ lọc ở trên">
-                Dọn được
-              </TableHead>
+              <SortHead label="Tổng" k="bytes" sort={sort} onSort={sortBy} right />
+              <SortHead
+                label="Dọn được"
+                k="cleanable"
+                sort={sort}
+                onSort={sortBy}
+                right
+                title="Phần chỉ thuộc hội thoại này, khớp bộ lọc ở trên"
+              />
               <TableHead className="w-40">
                 <Legend />
               </TableHead>
-              <TableHead className="text-right">Mới nhất</TableHead>
+              <SortHead label="Mới nhất" k="lastTs" sort={sort} onSort={sortBy} right />
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -276,6 +302,41 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   );
 }
 
+function SortHead({
+  label,
+  k,
+  sort,
+  onSort,
+  right,
+  title,
+}: {
+  label: string;
+  k: SortKey;
+  sort: Sort;
+  onSort: (k: SortKey) => void;
+  right?: boolean;
+  title?: string;
+}) {
+  const active = sort.key === k;
+  const Icon = !active ? ArrowUpDown : sort.desc ? ArrowDown : ArrowUp;
+  return (
+    <TableHead className={right ? "text-right" : undefined} aria-sort={active ? (sort.desc ? "descending" : "ascending") : "none"}>
+      <button
+        type="button"
+        title={title}
+        onClick={() => onSort(k)}
+        className={cn(
+          "hover:text-foreground inline-flex items-center gap-1 rounded px-1 -mx-1",
+          active ? "text-foreground font-semibold" : "text-muted-foreground",
+        )}
+      >
+        {label}
+        <Icon className={cn("size-3.5", !active && "opacity-50")} />
+      </button>
+    </TableHead>
+  );
+}
+
 function Legend() {
   return (
     <div className="text-muted-foreground flex flex-wrap gap-x-2 text-[11px] font-normal">
@@ -334,7 +395,15 @@ function Row({
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         />
         <div className="text-muted-foreground flex items-center gap-1.5 px-1 text-xs">
-          {c.isGroup && <Badge variant="secondary">Nhóm</Badge>}
+          {c.isGroup ? (
+            <Badge className="border-transparent bg-violet-600 text-white">
+              <Users /> Nhóm
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="text-muted-foreground">
+              <User /> Cá nhân
+            </Badge>
+          )}
           <span className="font-mono">{c.convId}</span>
         </div>
       </TableCell>
