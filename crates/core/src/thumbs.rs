@@ -247,7 +247,27 @@ pub fn materialize(db: &Db, item_id: i64, out_dir: &Path) -> Result<PathBuf> {
         k => k,
     };
     fs::create_dir_all(out_dir)?;
-    let out = out_dir.join(format!("{item_id}.{ext}"));
+    // Có tên tìm được (bản đã lưu / tiêu đề) → mở bằng đúng tên đó; mỗi file một thư mục con để tên không đụng nhau
+    let name: Option<String> = db
+        .query_row(
+            "SELECT name FROM doc_names WHERE item_id = ?",
+            [item_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    let file_name = match name
+        .as_deref()
+        .map(safe_file_name)
+        .filter(|n| !n.is_empty())
+    {
+        Some(n) if n.to_lowercase().ends_with(&format!(".{ext}")) => n,
+        Some(n) => format!("{n}.{ext}"),
+        None => format!("{item_id}.{ext}"),
+    };
+    let out_dir = out_dir.join(item_id.to_string());
+    fs::create_dir_all(&out_dir)?;
+    let out = out_dir.join(file_name);
     let tmp = out.with_extension("part");
     {
         use crate::detect::{NOISE_TRAILER, unnoise_prefix};
@@ -316,4 +336,24 @@ pub fn jxl_to_jpeg(src: &Path, size: u32, quality: u8) -> Result<Vec<u8>> {
         .encode_image(&small.to_rgb8())
         .map_err(img_err)?;
     Ok(out)
+}
+
+/// Tên file hợp lệ trên Windows: bỏ ký tự cấm, dấu chấm / khoảng trắng ở cuối, giới hạn độ dài.
+fn safe_file_name(name: &str) -> String {
+    let cleaned: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    cleaned
+        .trim()
+        .trim_end_matches(['.', ' '])
+        .chars()
+        .take(120)
+        .collect()
 }

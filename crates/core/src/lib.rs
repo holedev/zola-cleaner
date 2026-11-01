@@ -3,6 +3,7 @@
 pub mod archive;
 pub mod db;
 pub mod detect;
+pub mod docnames;
 pub mod error;
 pub mod filter;
 pub mod fsx;

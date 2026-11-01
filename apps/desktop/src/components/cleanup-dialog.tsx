@@ -357,10 +357,12 @@ function ItemList({
               <div key={it.id} className={cn("flex items-center gap-3 py-1.5 text-sm", !on && "opacity-40")}>
                 <Checkbox checked={on} onCheckedChange={() => onToggle(it.id)} />
                 <FileText className={cn("size-4 shrink-0", docColor(it.kind))} />
-                <span className="w-28 font-medium">{it.category === "audio" ? "Âm thanh" : docLabel(it.kind || "?")}</span>
-                <span className="w-20 text-right tabular-nums">{formatBytes(it.size)}</span>
-                <span className="text-muted-foreground w-24">{formatDate(it.ts)}</span>
-                <span className="text-muted-foreground flex-1 truncate font-mono text-xs">{it.convId}</span>
+                <span className="w-24 shrink-0 font-medium">{it.category === "audio" ? "Âm thanh" : docLabel(it.kind || "?")}</span>
+                <span className="min-w-0 flex-1 truncate" title={it.name ?? undefined}>
+                  {it.name ?? <span className="text-muted-foreground">Không rõ tên</span>}
+                </span>
+                <span className="w-20 shrink-0 text-right tabular-nums">{formatBytes(it.size)}</span>
+                <span className="text-muted-foreground w-24 shrink-0">{formatDate(it.ts)}</span>
                 {it.kind && (
                   <Button variant="ghost" size="sm" onClick={() => open(it)}>
                     Mở

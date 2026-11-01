@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
   CircleCheck,
+  FileSearch,
   FileArchive,
   FileDown,
   FolderInput,
@@ -18,6 +19,7 @@ import {
   RotateCcw,
   ScrollText,
   TriangleAlert,
+  X,
   Zap,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -68,6 +70,17 @@ export function SettingsPage() {
     const dir = await open({ directory: true, title: "Chọn thư mục lưu bản sao lưu ZIP", defaultPath: s?.backupDir });
     if (typeof dir === "string") await run(() => api.setBackupDir(dir), "Đã đổi thư mục sao lưu");
   };
+
+  const savedDirs = s?.savedDirs ?? [];
+  const setSaved = (dirs: string[] | null, ok: string) => run(() => api.setSavedDirs(dirs), ok);
+  const addSaved = async () => {
+    const dir = await open({ directory: true, title: "Chọn thư mục bạn hay lưu file từ Zalo" });
+    if (typeof dir === "string" && !savedDirs.includes(dir)) await setSaved([...savedDirs, dir], "Đã thêm thư mục. Đang tìm lại tên tài liệu…");
+  };
+  const refreshNames = () =>
+    run(async () => {
+      for (const r of roots.data ?? []) await api.refreshDocNames(r.id);
+    }, "Đang tìm lại tên tài liệu ở chế độ nền…");
 
   const exportLog = async () => {
     const path = await save({ title: "Lưu nhật ký", defaultPath: "zola-cleaner-nhat-ky.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
@@ -133,6 +146,58 @@ export function SettingsPage() {
             <FolderPlus /> Thêm thư mục dữ liệu Zalo…
           </Button>
         </div>
+      </section>
+
+      <section className="grid gap-3">
+        <SectionTitle
+          title="Tìm tên tài liệu"
+          hint='Zalo lưu tài liệu dưới tên mã. App lấy lại tên thật bằng cách so với file bạn đã "Lưu về máy" trong các thư mục dưới đây; không có thì dùng tiêu đề ghi bên trong file PDF / Word / Excel.'
+        />
+        <Card className="py-4">
+          <CardContent className="grid gap-3">
+            {!s ? (
+              <Skeleton className="h-10" />
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <FileSearch className="text-muted-foreground size-4" /> Thư mục bạn hay lưu file từ Zalo
+                  <Badge variant={s.savedDirsDefault ? "secondary" : "outline"}>{s.savedDirsDefault ? "Mặc định" : "Tự chọn"}</Badge>
+                </div>
+                {savedDirs.length === 0 && <p className="text-muted-foreground text-sm">Chưa có thư mục nào.</p>}
+                <ul className="grid gap-1">
+                  {savedDirs.map((d) => (
+                    <li key={d} className="flex items-center gap-2">
+                      <span className="text-muted-foreground min-w-0 flex-1 truncate font-mono text-xs" title={d}>
+                        {d}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Bỏ thư mục này"
+                        onClick={() => setSaved(savedDirs.filter((x) => x !== d), "Đã bỏ thư mục. Đang tìm lại tên tài liệu…")}
+                      >
+                        <X />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={addSaved}>
+                    <FolderPlus /> Thêm thư mục…
+                  </Button>
+                  {!s.savedDirsDefault && (
+                    <Button variant="ghost" size="sm" onClick={() => setSaved(null, "Đã dùng lại thư mục mặc định")}>
+                      <RotateCcw /> Mặc định
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" onClick={refreshNames}>
+                    <FileSearch /> Tìm lại tên
+                  </Button>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-3">

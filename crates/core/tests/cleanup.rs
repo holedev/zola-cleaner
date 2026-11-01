@@ -945,3 +945,82 @@ fn thung_rac_o_khac_that() {
     purge_job(&s.db, q2.job_id).unwrap();
     assert!(!s.a.exists());
 }
+
+#[test]
+fn tim_ten_tai_lieu_tu_ban_da_luu_va_tieu_de() {
+    use std::io::Write;
+    use zc_core::docnames::resolve_doc_names;
+    use zc_core::thumbs::materialize;
+    let s = setup();
+
+    // PDF có tiêu đề trong Info
+    let mut pdf = b"%PDF-1.4\n1 0 obj\n<< /Title (Bien ban hop) >>\nendobj\n".to_vec();
+    pdf.extend(std::iter::repeat_n(b'x', 200));
+    pdf.extend_from_slice(b"\n%%EOF\n");
+    let raw = zalo_noise(&pdf);
+    let f = put(&s.store, "fileNoise/pdf1", &raw, raw.len());
+    link(
+        &s.store,
+        &f,
+        "resource/555/fileNoise/1600000000010_sender_555",
+    );
+
+    // Word có tiêu đề trong docProps/core.xml
+    let mut docx = Vec::new();
+    {
+        let mut z = zip::ZipWriter::new(std::io::Cursor::new(&mut docx));
+        let o = zip::write::SimpleFileOptions::default();
+        z.start_file("[Content_Types].xml", o).unwrap();
+        z.write_all(b"<Types/>").unwrap();
+        z.start_file("word/document.xml", o).unwrap();
+        z.write_all(b"<w:document/>").unwrap();
+        z.start_file("docProps/core.xml", o).unwrap();
+        z.write_all(
+            "<cp:coreProperties><dc:title>Hợp đồng thuê nhà</dc:title></cp:coreProperties>"
+                .as_bytes(),
+        )
+        .unwrap();
+        z.finish().unwrap();
+    }
+    let rawx = zalo_noise(&docx);
+    let x = put(&s.store, "fileNoise/docx1", &rawx, rawx.len());
+    link(
+        &s.store,
+        &x,
+        "resource/555/fileNoise/1600000000011_sender_555",
+    );
+    s.rescan();
+
+    // Bản người dùng đã "Lưu về máy" của PDF (đúng nội dung gốc) → tên thật được ưu tiên hơn tiêu đề
+    let downloads = s.store.parent().unwrap().join("Downloads");
+    fs::create_dir_all(&downloads).unwrap();
+    fs::write(downloads.join("Biên bản họp tháng 10.pdf"), &pdf).unwrap();
+
+    let r = resolve_doc_names(&s.db, s.root_id, &[downloads]).unwrap();
+    assert_eq!((r.from_saved, r.from_title), (1, 1));
+    let name_of = |rel: &str| -> Option<String> {
+        s.db.query_row(
+            "SELECT name FROM doc_names WHERE item_id = ?",
+            [s.item_id_of(rel)],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        name_of("fileNoise/pdf1").as_deref(),
+        Some("Biên bản họp tháng 10.pdf")
+    );
+    assert_eq!(
+        name_of("fileNoise/docx1").as_deref(),
+        Some("Hợp đồng thuê nhà")
+    );
+
+    // Mở tài liệu: file tạm mang đúng tên, thêm đuôi nếu thiếu
+    let out = s.store.parent().unwrap().join("open");
+    let opened = materialize(&s.db, s.item_id_of("fileNoise/docx1"), &out).unwrap();
+    assert_eq!(opened.file_name().unwrap(), "Hợp đồng thuê nhà.docx");
+    assert_eq!(fs::read(&opened).unwrap(), docx);
+
+    // Lần sau không đọc lại file đã kiểm tra
+    assert_eq!(resolve_doc_names(&s.db, s.root_id, &[]).unwrap().checked, 0);
+}

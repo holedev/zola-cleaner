@@ -82,6 +82,7 @@ export interface CleanupItem {
   size: number;
   ts: number;
   convId: string | null;
+  name: string | null;
 }
 
 export interface CleanupItems {
@@ -131,6 +132,8 @@ export interface DocRef {
   kind: string;
   size: number;
   ts: number;
+  /** Tên tìm được: bản đã lưu về máy, hoặc tiêu đề trong file. */
+  name: string | null;
 }
 
 export interface Suggestion {
@@ -178,6 +181,9 @@ export interface AppSettings {
   trash: TrashSetting[];
   backupDir: string;
   backupIsDefault: boolean;
+  /** Thư mục người dùng hay lưu file từ Zalo — để tìm tên thật của tài liệu. */
+  savedDirs: string[];
+  savedDirsDefault: boolean;
 }
 
 export interface DiskInfo {
@@ -251,6 +257,8 @@ export const api = {
   setTrashDir: (rootId: number, path: string | null) => call<void>("set_trash_dir", { rootId, path }),
   setBackupDir: (path: string | null) => call<void>("set_backup_dir", { path }),
   backupDir: () => call<string>("backup_dir"),
+  setSavedDirs: (paths: string[] | null) => call<void>("set_saved_dirs", { paths }),
+  refreshDocNames: (rootId: number) => call<void>("refresh_doc_names", { rootId }),
   exportBackup: (jobIds: number[], path: string) => call<ArchiveResult>("export_backup", { jobIds, path }),
   importBackup: (rootId: number, path: string) => call<ArchiveResult>("import_backup", { rootId, path }),
 };

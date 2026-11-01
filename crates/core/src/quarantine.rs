@@ -738,6 +738,8 @@ pub struct CleanupItem {
     pub ts: i64,
     /// Một Conversation của Media Item (để người dùng biết file từ đâu).
     pub conv_id: Option<String>,
+    /// Tên tài liệu tìm được (nếu có).
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -793,7 +795,8 @@ pub fn cleanup_items(
     )?;
     let mut q = db.prepare(&format!(
         "SELECT i.id, i.category, i.kind, i.size, {ITEM_TS},
-           (SELECT conv_id FROM links WHERE item_id = i.id AND conv_id IS NOT NULL LIMIT 1)
+           (SELECT conv_id FROM links WHERE item_id = i.id AND conv_id IS NOT NULL LIMIT 1),
+           (SELECT name FROM doc_names WHERE item_id = i.id)
          {base} ORDER BY {order_by}, i.id LIMIT ? OFFSET ?"
     ))?;
     let mut p = params();
@@ -808,6 +811,7 @@ pub fn cleanup_items(
                 size: r.get(3)?,
                 ts: r.get(4)?,
                 conv_id: r.get(5)?,
+                name: r.get(6)?,
             })
         })?
         .collect::<rusqlite::Result<_>>()?;

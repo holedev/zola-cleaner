@@ -16,7 +16,7 @@ use zc_core::quarantine::{self, CleanupItems, CleanupPreview, Job, JobOptions, J
 use zc_core::scan::{ScanOptions, ScanProgress};
 use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
 use zc_core::suggest::{self, Suggestion};
-use zc_core::{Error, fsx, report, safety, thumbs};
+use zc_core::{Error, docnames, fsx, report, safety, thumbs};
 
 /// Lỗi trả về giao diện: `kind` để giao diện chọn cách hiển thị, `message` hiển thị thẳng.
 #[derive(Debug, Serialize)]
@@ -101,6 +101,18 @@ impl AppState {
     }
     fn job_options_for(&self, db: &db::Db, root_id: i64) -> CmdResult<JobOptions> {
         Ok(JobOptions::new(self.trash_dir_for(db, root_id)?))
+    }
+    /// Thư mục người dùng hay lưu file từ Zalo (để đối chiếu tên tài liệu): tự chọn, hoặc Downloads / Zalo Received Files / <ổ>:\Zalo.
+    fn saved_dirs(&self, db: &db::Db) -> CmdResult<(Vec<PathBuf>, bool)> {
+        if let Some(json) = db::get_setting(db, SAVED_DIRS_KEY)?
+            && let Ok(list) = serde_json::from_str::<Vec<String>>(&json)
+        {
+            return Ok((list.into_iter().map(PathBuf::from).collect(), false));
+        }
+        let home = std::env::var_os("USERPROFILE")
+            .map(PathBuf::from)
+            .unwrap_or_default();
+        Ok((docnames::default_saved_dirs(&home, &fsx::drives()), true))
     }
     /// Thư mục lưu bản sao lưu ZIP: người dùng tự chọn, hoặc Documents\Zola Cleaner.
     fn backup_dir(&self, db: &db::Db) -> CmdResult<(PathBuf, bool)> {
@@ -350,8 +362,42 @@ async fn start_scan(app: AppHandle, state: AppStateRef<'_>, root_id: i64) -> Cmd
         if let Err(e) = result {
             log::error!("Quét thất bại: {e}");
             let _ = app.emit("scan-error", e);
+            return;
         }
+        resolve_names(&app, &s, root_id);
     });
+    Ok(())
+}
+
+/// Tìm tên tài liệu chưa kiểm tra (đọc file, có thể mất vài chục giây) rồi báo giao diện cập nhật.
+fn resolve_names(app: &AppHandle, s: &AppState, root_id: i64) {
+    let run = || -> CmdResult<docnames::NameResult> {
+        let db = s.db()?;
+        let (dirs, _) = s.saved_dirs(&db)?;
+        Ok(docnames::resolve_doc_names(&db, root_id, &dirs)?)
+    };
+    match run() {
+        Ok(r) if r.checked > 0 => {
+            log::info!(
+                "Tên tài liệu: {} kiểm tra, {} từ bản đã lưu, {} từ tiêu đề",
+                r.checked,
+                r.from_saved,
+                r.from_title
+            );
+            let _ = app.emit("docnames-updated", r);
+        }
+        Ok(_) => {}
+        Err(e) => log::error!("Tìm tên tài liệu thất bại: {}", e.message),
+    }
+}
+
+/// Tìm lại tên tài liệu từ đầu (ví dụ sau khi đổi danh sách thư mục đã lưu).
+#[tauri::command]
+async fn refresh_doc_names(app: AppHandle, state: AppStateRef<'_>, root_id: i64) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || Ok(docnames::reset_doc_names(&s.db()?, root_id)?)).await?;
+    let s = state.inner().clone();
+    std::thread::spawn(move || resolve_names(&app, &s, root_id));
     Ok(())
 }
 
@@ -543,6 +589,7 @@ async fn purge(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
 // --- Cài đặt: nơi lưu thùng rác và bản sao lưu ---
 
 const BACKUP_DIR_KEY: &str = "backup_dir";
+const SAVED_DIRS_KEY: &str = "saved_dirs";
 
 fn default_backup_dir() -> PathBuf {
     let home = std::env::var_os("USERPROFILE")
@@ -569,6 +616,9 @@ struct Settings {
     trash: Vec<TrashSetting>,
     backup_dir: String,
     backup_is_default: bool,
+    /// Thư mục người dùng hay lưu file từ Zalo — dùng để tìm tên thật của tài liệu.
+    saved_dirs: Vec<String>,
+    saved_dirs_default: bool,
 }
 
 #[tauri::command]
@@ -596,10 +646,16 @@ async fn settings(state: AppStateRef<'_>) -> CmdResult<Settings> {
             });
         }
         let (backup, backup_is_default) = s.backup_dir(&db)?;
+        let (saved, saved_dirs_default) = s.saved_dirs(&db)?;
         Ok(Settings {
             trash,
             backup_dir: backup.to_string_lossy().into_owned(),
             backup_is_default,
+            saved_dirs: saved
+                .iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect(),
+            saved_dirs_default,
         })
     })
     .await
@@ -641,6 +697,34 @@ async fn set_backup_dir(state: AppStateRef<'_>, path: Option<String>) -> CmdResu
         Ok(())
     })
     .await
+}
+
+/// Đổi danh sách thư mục đã lưu (null = mặc định), rồi tìm lại tên tài liệu cho mọi tài khoản.
+#[tauri::command]
+async fn set_saved_dirs(
+    app: AppHandle,
+    state: AppStateRef<'_>,
+    paths: Option<Vec<String>>,
+) -> CmdResult<()> {
+    let s = state.inner().clone();
+    let roots = blocking(move || {
+        let db = s.db()?;
+        let json = paths.map(|p| serde_json::to_string(&p).unwrap_or_default());
+        db::set_setting(&db, SAVED_DIRS_KEY, json.as_deref())?;
+        let roots = db::list_roots(&db)?;
+        for r in &roots {
+            docnames::reset_doc_names(&db, r.id)?;
+        }
+        Ok(roots)
+    })
+    .await?;
+    let s = state.inner().clone();
+    std::thread::spawn(move || {
+        for r in roots {
+            resolve_names(&app, &s, r.id);
+        }
+    });
+    Ok(())
 }
 
 /// Thư mục lưu ZIP đang dùng (tạo sẵn để hộp thoại lưu file mở đúng chỗ).
@@ -993,6 +1077,8 @@ pub fn run() {
             set_trash_dir,
             set_backup_dir,
             backup_dir,
+            set_saved_dirs,
+            refresh_doc_names,
             roots,
             add_root,
             start_scan,

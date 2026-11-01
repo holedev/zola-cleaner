@@ -156,6 +156,15 @@ pub struct DocRef {
     pub kind: String,
     pub size: i64,
     pub ts: i64,
+    /// Tên tìm được (bản đã lưu về máy / tiêu đề trong file), xem docnames.rs.
+    pub name: Option<String>,
+}
+
+/// item_id → tên tài liệu đã tìm được.
+pub(crate) fn doc_names(db: &Db) -> Result<HashMap<i64, String>> {
+    let mut q = db.prepare("SELECT item_id, name FROM doc_names WHERE name IS NOT NULL")?;
+    Ok(q.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
 }
 
 /// Số tài liệu gần đây trả về cho mỗi Conversation.
@@ -274,6 +283,7 @@ pub fn list_conversations(
                 kind: p.kind.clone(),
                 size: p.size,
                 ts: p.ts,
+                name: None,
             });
         }
         if will_clean && p.area == "picture" && p.category == "image" {
@@ -292,7 +302,15 @@ pub fn list_conversations(
         }
     }
 
+    let names = if doc_pool.is_empty() {
+        HashMap::new()
+    } else {
+        doc_names(db)?
+    };
     for (conv, mut docs) in doc_pool {
+        for d in &mut docs {
+            d.name = names.get(&d.id).cloned();
+        }
         docs.sort_unstable_by_key(|d| std::cmp::Reverse(d.ts));
         docs.truncate(RECENT_DOCS);
         if let Some(c) = by_conv.get_mut(conv) {

@@ -472,13 +472,17 @@ function Row({
               key={d.id}
               type="button"
               onClick={() => openDoc(d.id)}
-              title={`Mở · ${formatDate(d.ts)}`}
-              className="hover:bg-muted flex items-center gap-1.5 rounded px-1 text-left text-xs"
+              title={`Mở ${d.name ?? docLabel(d.kind)} · ${docLabel(d.kind)} · ${formatBytes(d.size)} · ${formatDate(d.ts)}`}
+              className="hover:bg-muted flex max-w-72 items-center gap-1.5 rounded px-1 text-left text-xs"
             >
               <FileText className={cn("size-3.5 shrink-0", docColor(d.kind))} />
-              <span className="font-medium">{docLabel(d.kind)}</span>
-              <span className="text-muted-foreground tabular-nums">{formatBytes(d.size)}</span>
-              <span className="text-muted-foreground">{formatDate(d.ts)}</span>
+              {d.name ? (
+                <span className="truncate font-medium">{d.name}</span>
+              ) : (
+                <span className="font-medium">{docLabel(d.kind)}</span>
+              )}
+              <span className="text-muted-foreground shrink-0 tabular-nums">{formatBytes(d.size)}</span>
+              {!d.name && <span className="text-muted-foreground shrink-0">{formatDate(d.ts)}</span>}
             </button>
           ))}
         </div>

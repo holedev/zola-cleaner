@@ -92,13 +92,15 @@ export default function App() {
   useEffect(() => {
     const un = [
       listen<ScanProgress>("scan-progress", (e) => showScan(e.payload)),
+      // Tìm xong tên tài liệu (chạy nền sau khi quét) → cập nhật danh sách
+      listen("docnames-updated", () => void invalidate()),
       listen<string>("scan-error", (e) => {
         blocking.set(null);
         toast.error(`Quét thất bại: ${e.payload}`);
       }),
     ];
     return () => un.forEach((p) => void p.then((f) => f()));
-  }, [showScan, blocking]);
+  }, [showScan, blocking, invalidate]);
 
   const scan = useCallback(
     async (id: number) => {

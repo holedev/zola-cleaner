@@ -88,6 +88,14 @@ CREATE TABLE IF NOT EXISTS jobs (
   quarantine_dir  TEXT NOT NULL
 );
 
+-- Tên dễ hiểu của tài liệu (Zalo lưu tài liệu dưới tên mã). name NULL = đã tìm, không có tên
+CREATE TABLE IF NOT EXISTS doc_names (
+  item_id     INTEGER PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  name        TEXT,
+  source      TEXT,                   -- saved (bản đã lưu về máy) | title (tiêu đề trong file)
+  checked_at  INTEGER NOT NULL
+);
+
 -- Cấu hình của người dùng (vd. backup_dir)
 CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
