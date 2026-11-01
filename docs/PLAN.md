@@ -176,18 +176,22 @@ Mỗi Media Item chỉ đọc header một lần dù có nhiều Link. Cuối l�
 Bản web Node (commit `3ea7fac`) đã xong: quét, Conversation, Preview, Quarantine / Restore / Purge, thumbnail JXL.
 
 ### Giai đoạn 0 — Thực nghiệm (bằng app Node)
-- [ ] Cách ly 1 hội thoại nhỏ, mở Zalo xem phản ứng, khôi phục → ghi vào [zalo-layout.md](zalo-layout.md); quyết định `.rescache`
+- [x] Cách ly 1 hội thoại nhỏ, mở Zalo xem phản ứng → ghi vào [zalo-layout.md](zalo-layout.md): Zalo (có Cloud) tự tải lại ảnh, tự sửa `.rescache` → app không đụng `.rescache`
+- [ ] Kiểm tra Zalo hiển thị sau khi Khôi phục
 
 ### Giai đoạn 1 — Toolchain
-- [ ] Rust (stable-msvc) + VS Build Tools (C++); khoá ký cập nhật Tauri (không commit)
+- [x] Rust (stable-msvc) + VS Build Tools (C++)
+- [ ] Khoá ký cập nhật Tauri (không commit)
 
 ### Giai đoạn 2 — Lõi Rust (`crates/core`)
-- [ ] Port layout / detect / db / scan / stats / quarantine / thumbs / safety + test đối chiếu từ bản TS
-- [ ] Supported Layout (fingerprint), Structure Report, nhật ký đã lược
-- [ ] `zc scan` khớp số liệu bản TS trên dữ liệu thật; đường dẫn > 260 ký tự
+- [x] Port layout / detect / db / scan / stats / quarantine / thumbs / safety + test đối chiếu từ bản TS (26 test)
+- [x] Supported Layout (fingerprint), Structure Report, nhật ký đã lược
+- [x] `zc scan` khớp số liệu bản TS trên dữ liệu thật (quét mới 2.4 s, quét lại 1.2 s); đường dẫn > 260 ký tự
 
 ### Giai đoạn 3 — App desktop (`apps/desktop`)
-- [ ] Command + protocol `thumb://`; UI shadcn: Gợi ý, Theo hội thoại (theo bộ lọc), Cách ly, loading / chặn thao tác
+- [x] Command + protocol `thumb://`; UI shadcn: Gợi ý, Theo hội thoại (theo bộ lọc), Cách ly, loading / chặn thao tác
+- [x] File cài NSIS 3.7 MB
+- [ ] Biểu tượng app; thử cách ly → khôi phục → giải phóng bằng app desktop trên dữ liệu thật
 
 ### Giai đoạn 4 — Phát hành
 - [ ] Repo public mới (MIT, lịch sử làm sạch), CI build NSIS + updater, README người dùng cuối
