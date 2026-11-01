@@ -264,7 +264,8 @@ export function formatBytes(n: number): string {
     v /= 1024;
     u++;
   }
-  return `${v.toFixed(v >= 100 ? 0 : 1)} ${units[u]}`;
+  // Kiểu Việt: dấu phẩy thập phân (13,4 GB)
+  return `${v.toLocaleString("vi-VN", { maximumFractionDigits: v >= 100 ? 0 : 1, minimumFractionDigits: v >= 100 ? 0 : 1 })} ${units[u]}`;
 }
 
 export function formatDate(ms: number | null): string {

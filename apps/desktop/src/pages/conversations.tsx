@@ -132,7 +132,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const title = allConvs ? "Dọn ở mọi hội thoại" : `Dọn ${selected.size} hội thoại đã chọn`;
 
   return (
-    <div className="grid gap-4 pb-24">
+    <div className="grid gap-4">
       <div className="bg-card flex flex-wrap items-end gap-x-8 gap-y-4 rounded-xl border p-4">
         <div className="grid gap-2">
           <Label className="text-muted-foreground text-xs">Loại</Label>
@@ -230,7 +230,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
         )}
       </div>
 
-      <div className={cn("rounded-xl border transition-opacity", recalculating && "pointer-events-none opacity-50")}>
+      <div className={cn("overflow-x-auto rounded-xl border bg-white transition-opacity", recalculating && "pointer-events-none opacity-50")}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -284,8 +284,8 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
 
       <ConversationMonthsDialog conv={monthsFor} base={base} onClose={() => setMonthsFor(null)} onCleanup={onCleanup} />
 
-      <footer className="bg-background/95 fixed inset-x-0 bottom-0 z-10 border-t backdrop-blur">
-        <div className="mx-auto flex w-full max-w-[1920px] items-center gap-4 px-6 py-3 2xl:px-10">
+      <footer className="bg-background/95 sticky bottom-0 z-10 -mx-8 -mb-10 border-t backdrop-blur">
+        <div className="flex items-center gap-4 px-8 py-3">
           <div className="flex-1 text-sm">
             {!selection ? (
               <span className="text-muted-foreground">Chọn hội thoại (hoặc "Mọi hội thoại") và ít nhất một loại.</span>
@@ -451,7 +451,7 @@ function Row({
               type="button"
               title="Xem ảnh"
               // 6 ảnh trên màn hình thường, 10 ảnh trên màn hình lớn
-              className={cn("focus-visible:ring-ring rounded outline-none focus-visible:ring-2", i >= 6 && "hidden 2xl:block")}
+              className={cn("focus-visible:ring-ring shrink-0 rounded outline-none focus-visible:ring-2", i >= 6 && "hidden 2xl:block")}
               onClick={() => view(c.thumbIds, i, c.alias || c.convId)}
             >
               <img

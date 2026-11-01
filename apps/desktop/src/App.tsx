@@ -1,7 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye, RefreshCw } from "lucide-react";
+import { Eye } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
@@ -19,18 +19,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
-import { accountName, api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
+import { api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
 import { keys, useHealth, useInvalidateIndex, useRoots } from "@/lib/queries";
 import { ConversationsPage } from "@/pages/conversations";
 import { JobsPage } from "@/pages/jobs";
 import { OverviewPage } from "@/pages/overview";
 import { SettingsPage } from "@/pages/settings";
+import { Sidebar, TAB_TITLE, type Tab } from "@/components/sidebar";
 import { SuggestionsPage } from "@/pages/suggestions";
 
-type Tab = "suggestions" | "conversations" | "jobs" | "overview" | "settings";
 
 const PHASE: Record<ScanProgress["phase"], string> = {
   listing: "Đang liệt kê thư mục",
@@ -38,6 +35,15 @@ const PHASE: Record<ScanProgress["phase"], string> = {
   writing: "Đang cập nhật chỉ mục",
   done: "Xong",
   failed: "Lỗi",
+};
+
+/** Một dòng giải thích dưới tiêu đề mỗi mục. */
+const TAB_HINT: Record<Tab, string> = {
+  suggestions: "",
+  conversations: "Chọn hội thoại và khoảng thời gian cần dọn. Số liệu đổi ngay theo bộ lọc.",
+  jobs: "File đã dọn nằm ở đây 7 ngày. Khôi phục nếu thiếu, dọn sạch để lấy lại dung lượng.",
+  overview: "Dữ liệu Zalo trên máy, theo loại, tuổi và thư mục. Tài khoản và đường dẫn.",
+  settings: "Nơi lưu thùng rác và bản sao lưu.",
 };
 
 export default function App() {
@@ -168,36 +174,26 @@ export default function App() {
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-[1920px] gap-5 px-6 py-5 2xl:px-10">
-      <header className="flex flex-wrap items-center gap-4">
-        <h1 className="text-xl font-semibold tracking-tight">Zola Cleaner</h1>
-        {liveRoots.length > 1 && (
-          <Select value={String(rootId)} onValueChange={(v) => setRootId(Number(v))}>
-            <SelectTrigger className="w-64">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {liveRoots.map((r) => (
-                <SelectItem key={r.id} value={String(r.id)}>
-                  {accountName(r)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {liveRoots.length <= 1 && root && (
-          <Badge
-            variant="outline"
-            title="Tài khoản Zalo đang xem. Đặt tên ở tab Tổng quan. Có tài khoản khác đăng nhập trên máy thì app tự phát hiện."
-          >
-            {accountName(root)}
-          </Badge>
-        )}
-        <div className="flex-1" />
-        <Button variant="outline" onClick={() => scan(rootId)}>
-          <RefreshCw /> Quét lại
-        </Button>
-      </header>
+    <div className="flex h-screen overflow-hidden">
+      <Sidebar
+        tab={tab}
+        onTab={(t) => {
+          setTab(t);
+          void qc.invalidateQueries({ queryKey: keys.health });
+        }}
+        roots={liveRoots.length ? liveRoots : roots.data}
+        rootId={rootId}
+        onRoot={setRootId}
+        onScan={() => scan(rootId)}
+      />
+      <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="mx-auto grid w-full max-w-[1600px] gap-6 px-8 pt-7 pb-10">
+      {tab !== "suggestions" && (
+        <header>
+          <h1 className="text-2xl font-semibold tracking-tight">{TAB_TITLE[tab]}</h1>
+          <p className="text-muted-foreground mt-1 text-sm">{TAB_HINT[tab]}</p>
+        </header>
+      )}
 
       {health.data?.zaloRunning && <ZaloBanner />}
       {root && root.layout.status === "unsupported" && (
@@ -205,42 +201,20 @@ export default function App() {
           <Eye />
           <AlertTitle>Chế độ chỉ xem</AlertTitle>
           <AlertDescription>
-            Cấu trúc thư mục Zalo trên máy này chưa được kiểm chứng, nên app không dọn để tránh xoá nhầm. Vào tab Tổng quan, bấm
+            Cấu trúc thư mục Zalo trên máy này chưa được kiểm chứng, nên app không dọn để tránh xoá nhầm. Vào Tổng quan, bấm
             "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển để được hỗ trợ.
           </AlertDescription>
         </Alert>
       )}
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v as Tab);
-          void qc.invalidateQueries({ queryKey: keys.health });
-        }}
-      >
-        <TabsList>
-          <TabsTrigger value="suggestions">Gợi ý</TabsTrigger>
-          <TabsTrigger value="conversations">Theo hội thoại</TabsTrigger>
-          <TabsTrigger value="jobs">Thùng rác</TabsTrigger>
-          <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-          <TabsTrigger value="settings">Cài đặt</TabsTrigger>
-        </TabsList>
-        <TabsContent value="suggestions" className="mt-4">
-          <SuggestionsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} />
-        </TabsContent>
-        <TabsContent value="conversations" className="mt-4">
-          <ConversationsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} />
-        </TabsContent>
-        <TabsContent value="jobs" className="mt-4">
-          <JobsPage rootId={rootId} />
-        </TabsContent>
-        <TabsContent value="overview" className="mt-4">
-          <OverviewPage rootId={rootId} />
-        </TabsContent>
-        <TabsContent value="settings" className="mt-4">
-          <SettingsPage />
-        </TabsContent>
-      </Tabs>
+      {tab === "suggestions" && (
+        <SuggestionsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} onBrowse={() => setTab("conversations")} />
+      )}
+      {tab === "conversations" && <ConversationsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} />}
+      {tab === "jobs" && <JobsPage rootId={rootId} />}
+      {tab === "overview" && <OverviewPage rootId={rootId} />}
+      {tab === "settings" && <SettingsPage />}
+      </div>
 
       <CleanupDialog request={cleanup} onClose={() => setCleanup(null)} onGoToJobs={() => setTab("jobs")} />
 
@@ -263,5 +237,6 @@ export default function App() {
         </AlertDialogContent>
       </AlertDialog>
     </main>
+    </div>
   );
 }

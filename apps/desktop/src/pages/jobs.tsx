@@ -5,7 +5,6 @@ import { Archive, CircleCheck, FileArchive, FolderOpen, RotateCcw, Trash2, Uploa
 import { useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
-import { DiskCard } from "@/components/disk-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,7 +134,6 @@ export function JobsPage({ rootId }: { rootId: number }) {
 
   return (
     <div className="grid gap-6">
-      <div className="grid gap-4 lg:grid-cols-2">
       <Card>
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
@@ -176,8 +174,6 @@ export function JobsPage({ rootId }: { rootId: number }) {
           </div>
         </CardHeader>
       </Card>
-      <DiskCard rootId={rootId} />
-      </div>
 
       {jobs.isPending ? (
         <Skeleton className="h-40 rounded-xl" />
