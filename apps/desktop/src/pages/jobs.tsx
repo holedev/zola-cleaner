@@ -22,9 +22,9 @@ import { useHealth, useInvalidateIndex, useJobs } from "@/lib/queries";
 
 const STATUS: Record<JobStatus, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
   running: { label: "Đang chạy", variant: "outline" },
-  quarantined: { label: "Đang cách ly", variant: "default" },
+  quarantined: { label: "Trong thùng rác", variant: "default" },
   restored: { label: "Đã khôi phục", variant: "secondary" },
-  purged: { label: "Đã giải phóng", variant: "secondary" },
+  purged: { label: "Đã xoá vĩnh viễn", variant: "secondary" },
   failed: { label: "Có lỗi", variant: "destructive" },
 };
 
@@ -46,14 +46,14 @@ export function JobsPage({ rootId }: { rootId: number }) {
     let freed = 0;
     let failed = 0;
     try {
-      await blocking.run("Đang giải phóng dung lượng…", async () => {
+      await blocking.run("Đang dọn sạch thùng rác…", async () => {
         for (const j of list) {
           const r = await api.purge(j.id);
           freed += r.bytes;
           failed += r.failed;
         }
       });
-      toast.success(`Đã giải phóng ${formatBytes(freed)}`);
+      toast.success(`Đã xoá vĩnh viễn, ổ đĩa trống thêm ${formatBytes(freed)}`);
       if (failed) toast.warning(`${failed} file chưa xoá được — thử lại sau.`);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -77,7 +77,7 @@ export function JobsPage({ rootId }: { rootId: number }) {
       <Card>
         <CardHeader>
           <CardDescription className="flex items-center gap-2">
-            <Archive className="size-4" /> Đang giữ trong khu cách ly (vẫn chiếm ổ đĩa)
+            <Archive className="size-4" /> Đang nằm trong thùng rác (vẫn chiếm ổ đĩa)
           </CardDescription>
           {jobs.isPending ? (
             <Skeleton className="h-10 w-32" />
@@ -86,9 +86,13 @@ export function JobsPage({ rootId }: { rootId: number }) {
           )}
           <CardAction>
             <Button size="lg" disabled={active.length === 0} onClick={() => setConfirmPurge(active)}>
-              <Trash2 /> Giải phóng ngay
+              <Trash2 /> Dọn sạch thùng rác
             </Button>
           </CardAction>
+          <CardDescription className="text-xs">
+            Đây là thùng rác riêng của Zola Cleaner, không phải Thùng rác của Windows. Muốn lấy lại file thì bấm Khôi phục ở
+            đây — app sẽ trả file về đúng mọi chỗ Zalo cần.
+          </CardDescription>
         </CardHeader>
       </Card>
 
@@ -106,7 +110,7 @@ export function JobsPage({ rootId }: { rootId: number }) {
                 <TableHead className="text-right">Số file</TableHead>
                 <TableHead className="text-right">Dung lượng</TableHead>
                 <TableHead>Trạng thái</TableHead>
-                <TableHead>Tự giải phóng</TableHead>
+                <TableHead>Tự xoá vĩnh viễn</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -134,7 +138,7 @@ export function JobsPage({ rootId }: { rootId: number }) {
                           <RotateCcw /> Khôi phục
                         </Button>
                         <Button variant="destructive" size="sm" onClick={() => setConfirmPurge([j])}>
-                          <Trash2 /> Giải phóng
+                          <Trash2 /> Xoá vĩnh viễn
                         </Button>
                       </div>
                     )}
@@ -150,7 +154,7 @@ export function JobsPage({ rootId }: { rootId: number }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Giải phóng {formatBytes((confirmPurge ?? []).reduce((s, j) => s + j.totalBytes, 0))}?
+              Xoá vĩnh viễn {formatBytes((confirmPurge ?? []).reduce((s, j) => s + j.totalBytes, 0))}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {(confirmPurge ?? []).reduce((s, j) => s + j.itemCount, 0).toLocaleString("vi-VN")} file sẽ bị xoá vĩnh viễn và

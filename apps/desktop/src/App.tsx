@@ -21,7 +21,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { api, errorMessage, formatBytes, type ScanProgress } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
 import { keys, useHealth, useInvalidateIndex, useRoots } from "@/lib/queries";
 import { ConversationsPage } from "@/pages/conversations";
 import { JobsPage } from "@/pages/jobs";
@@ -100,7 +101,7 @@ export default function App() {
     [blocking],
   );
 
-  // Mỗi lần mở app: quét lại (nhanh, chỉ đọc file mới) + báo job đã tự giải phóng
+  // Mỗi lần mở app: quét lại (nhanh, chỉ đọc file mới) + báo thùng rác đã tự dọn
   const started = useRef(false);
   useEffect(() => {
     if (started.current || rootId == null || !health.data) return;
@@ -108,13 +109,17 @@ export default function App() {
     const running = health.data.scanning.find((s) => s.rootId === rootId);
     if (running) showScan(running);
     else void scan(rootId);
+    void api.takeNewAccounts().then((uids) => {
+      for (const uid of uids) toast.info(`Phát hiện tài khoản Zalo mới (${shortUid(uid)}) trên máy — chọn ở góc trên để xem.`);
+      if (uids.length) void qc.invalidateQueries({ queryKey: keys.roots });
+    });
     void api.takeAutoPurged().then((list) => {
       const bytes = list.reduce((s, r) => s + r.bytes, 0);
-      if (list.length) toast.info(`Đã tự giải phóng ${formatBytes(bytes)} đã cách ly quá 7 ngày.`);
+      if (list.length) toast.info(`Đã tự xoá vĩnh viễn ${formatBytes(bytes)} nằm trong thùng rác quá 7 ngày.`);
     });
-  }, [rootId, health.data, scan, showScan]);
+  }, [rootId, health.data, scan, showScan, qc]);
 
-  // Đóng app khi còn file đang cách ly → nhắc giải phóng
+  // Đóng app khi thùng rác còn file → nhắc dọn sạch
   useEffect(() => {
     const w = getCurrentWindow();
     const un = w.onCloseRequested(async (event) => {
@@ -133,7 +138,7 @@ export default function App() {
     const ids = closeAsk?.jobIds ?? [];
     setCloseAsk(null);
     try {
-      await blocking.run("Đang giải phóng dung lượng…", async () => {
+      await blocking.run("Đang dọn sạch thùng rác…", async () => {
         for (const id of ids) await api.purge(id);
       });
     } catch (e) {
@@ -168,11 +173,16 @@ export default function App() {
             <SelectContent>
               {roots.data.map((r) => (
                 <SelectItem key={r.id} value={String(r.id)}>
-                  Tài khoản {r.uid ? `…${r.uid.slice(-4)}` : `#${r.id}`}
+                  Tài khoản {r.uid ? shortUid(r.uid) : `#${r.id}`}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+        )}
+        {roots.data.length === 1 && root && (
+          <Badge variant="outline" title="Tài khoản Zalo đang xem. Có tài khoản khác đăng nhập trên máy thì app tự phát hiện.">
+            Tài khoản {shortUid(root.uid)}
+          </Badge>
         )}
         <div className="flex-1" />
         <Button variant="outline" onClick={() => scan(rootId)}>
@@ -202,7 +212,7 @@ export default function App() {
         <TabsList>
           <TabsTrigger value="suggestions">Gợi ý</TabsTrigger>
           <TabsTrigger value="conversations">Theo hội thoại</TabsTrigger>
-          <TabsTrigger value="jobs">Cách ly</TabsTrigger>
+          <TabsTrigger value="jobs">Thùng rác</TabsTrigger>
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
         </TabsList>
         <TabsContent value="suggestions" className="mt-4">
@@ -224,10 +234,10 @@ export default function App() {
       <AlertDialog open={closeAsk != null} onOpenChange={(o) => !o && setCloseAsk(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Còn {closeAsk && formatBytes(closeAsk.bytes)} trong khu cách ly</AlertDialogTitle>
+            <AlertDialogTitle>Thùng rác còn {closeAsk && formatBytes(closeAsk.bytes)}</AlertDialogTitle>
             <AlertDialogDescription>
-              Dung lượng này chưa được trả lại cho ổ đĩa. Nếu đã mở Zalo kiểm tra và thấy ổn, hãy giải phóng ngay. Nếu để sau, lần
-              mở app kế tiếp sau 7 ngày sẽ tự giải phóng.
+              Dung lượng này chưa được trả lại cho ổ đĩa. Nếu đã mở Zalo kiểm tra và thấy ổn, hãy dọn sạch thùng rác. Nếu để sau, lần
+              mở app kế tiếp sau 7 ngày sẽ tự xoá vĩnh viễn.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -235,7 +245,7 @@ export default function App() {
             <Button variant="outline" onClick={closeNow}>
               Để sau, thoát
             </Button>
-            <AlertDialogAction onClick={purgeAndClose}>Giải phóng & thoát</AlertDialogAction>
+            <AlertDialogAction onClick={purgeAndClose}>Dọn sạch & thoát</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -4,6 +4,7 @@
 import { CalendarRange } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
+import { useImageViewer } from "@/components/image-viewer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +37,7 @@ export function ConversationMonthsDialog({ conv, base, onClose, onCleanup }: Pro
     ? { rootId: base.rootId, categories: base.categories, minSize: base.minSize, convIds: [conv.convId] }
     : null;
   const q = useConversationMonths(filter);
+  const view = useImageViewer();
   const [picked, setPicked] = useState<string | null>(null);
   useEffect(() => setPicked(null), [conv?.convId]);
 
@@ -83,31 +85,38 @@ export function ConversationMonthsDialog({ conv, base, onClose, onCleanup }: Pro
                 const on = idx >= 0 && i >= idx;
                 return (
                   <li key={m.month}>
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setPicked(m.month)}
+                      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setPicked(m.month)}
                       className={cn(
-                        "hover:bg-muted flex w-full items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
+                        "hover:bg-muted flex w-full cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-left transition-colors",
                         on ? "border-destructive/40 bg-destructive/5" : "border-transparent",
                         m.month === picked && "ring-destructive/40 ring-2",
                       )}
                     >
                       <span className={cn("w-28 shrink-0 font-medium", on && "text-destructive")}>{monthLabel(m.month)}</span>
                       <span className="flex flex-1 gap-1">
-                        {m.thumbIds.map((id) => (
+                        {m.thumbIds.map((id, k) => (
                           <img
                             key={id}
                             src={api.thumbUrl(id)}
                             loading="lazy"
                             alt=""
-                            className={cn("bg-muted size-10 rounded object-cover", on && "opacity-60")}
+                            title="Xem ảnh"
+                            className={cn("bg-muted size-10 rounded object-cover hover:brightness-90", on && "opacity-60")}
+                            onClick={(e) => {
+                              e.stopPropagation(); // xem ảnh, không chọn tháng
+                              view(m.thumbIds, k, `${name} — ${monthLabel(m.month)}`);
+                            }}
                             onError={(e) => (e.currentTarget.style.visibility = "hidden")}
                           />
                         ))}
                       </span>
                       <span className="text-muted-foreground w-20 text-right text-sm tabular-nums">{m.count.toLocaleString("vi-VN")} file</span>
                       <span className="w-20 text-right font-medium tabular-nums">{formatBytes(m.bytes)}</span>
-                    </button>
+                    </div>
                   </li>
                 );
               })}

@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, FileDown, FolderPlus, ScrollText, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { api, AREA_LABEL, type Bucket, CATEGORY_LABEL, errorMessage, formatBytes, type RootInfo } from "@/lib/api";
+import { api, AREA_LABEL, type Bucket, CATEGORY_LABEL, errorMessage, formatBytes, type RootInfo, shortUid } from "@/lib/api";
 import { keys, useRoots, useStats } from "@/lib/queries";
 
 export function OverviewPage({ rootId }: { rootId: number }) {
   const stats = useStats(rootId);
   const roots = useRoots();
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
+  /** Tài khoản đã đăng nhập trên máy nhưng Zalo chưa tạo thư mục media (chưa có gì để dọn). */
+  const noMedia = (accounts.data ?? []).filter((a) => !a.store);
   const qc = useQueryClient();
   const blocking = useBlocking();
 
@@ -60,7 +63,9 @@ export function OverviewPage({ rootId }: { rootId: number }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Thư mục media của Zalo (theo tài khoản)</CardTitle>
+          <CardTitle>
+            Tài khoản Zalo trên máy ({(accounts.data?.length ?? roots.data?.length ?? 0).toLocaleString("vi-VN")})
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
           {roots.data?.map((r) => (
@@ -74,8 +79,9 @@ export function OverviewPage({ rootId }: { rootId: number }) {
                   <TriangleAlert /> Chỉ xem
                 </Badge>
               )}
+              <span className="font-medium">Tài khoản {shortUid(r.uid)}</span>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-xs" title={r.path}>
+                <div className="text-muted-foreground truncate font-mono text-xs" title={r.path}>
                   {r.path}
                 </div>
                 {r.layout.status === "unsupported" && (
@@ -85,6 +91,13 @@ export function OverviewPage({ rootId }: { rootId: number }) {
               <Button variant="outline" size="sm" onClick={() => exportReport(r)}>
                 <FileDown /> Xuất báo cáo cấu trúc
               </Button>
+            </div>
+          ))}
+          {noMedia.map((a) => (
+            <div key={a.uid} className="text-muted-foreground flex items-center gap-3 rounded-lg border border-dashed p-3 text-sm">
+              <Badge variant="outline">Chưa có media</Badge>
+              <span className="text-foreground font-medium">Tài khoản {shortUid(a.uid)}</span>
+              <span>Đã đăng nhập trên máy nhưng chưa tải ảnh / file nào — không có gì để dọn.</span>
             </div>
           ))}
           <div className="flex gap-2">

@@ -12,6 +12,15 @@ export interface RootInfo {
   layout: LayoutCheck;
 }
 
+export interface AccountInfo {
+  uid: string;
+  /** Thư mục media của tài khoản, nếu Zalo đã tạo. */
+  store: string | null;
+}
+
+/** "9533337693992746410" → "…6410" (đủ để phân biệt, không lộ cả uid trên màn hình). */
+export const shortUid = (uid: string | null | undefined) => (uid ? `…${uid.slice(-4)}` : "?");
+
 export type ScanPhase = "listing" | "reading" | "writing" | "done" | "failed";
 
 export interface ScanProgress {
@@ -88,6 +97,15 @@ export interface Conversation {
   cleanableBytes: number;
   lastTs: number | null;
   thumbIds: number[];
+  /** Tài liệu / file nén mới nhất. Zalo không giữ tên gốc trên máy → chỉ có loại, dung lượng, thời điểm. */
+  recentDocs: DocRef[];
+}
+
+export interface DocRef {
+  id: number;
+  kind: string;
+  size: number;
+  ts: number;
 }
 
 export interface Suggestion {
@@ -143,6 +161,8 @@ const call = <T>(cmd: string, args?: Record<string, unknown>) => invoke<T>(cmd, 
 export const api = {
   health: () => call<Health>("health"),
   takeAutoPurged: () => call<JobResult[]>("take_auto_purged"),
+  takeNewAccounts: () => call<string[]>("take_new_accounts"),
+  accounts: () => call<AccountInfo[]>("accounts"),
   roots: () => call<RootInfo[]>("roots"),
   addRoot: (path: string) => call<RootInfo>("add_root", { path }),
   startScan: (rootId: number) => call<void>("start_scan", { rootId }),
@@ -160,6 +180,10 @@ export const api = {
   exportReport: (rootId: number, path: string) => call<void>("export_report", { rootId, path }),
   exportLog: (path: string) => call<void>("export_log", { path }),
   thumbUrl: (itemId: number) => convertFileSrc(String(itemId), "thumb"),
+  /** Ảnh cỡ lớn để xem (JPEG XL được giải mã). */
+  viewUrl: (itemId: number) => convertFileSrc(String(itemId), "media"),
+  /** Mở bằng ứng dụng mặc định của Windows (qua một bản tạm, tài liệu fileNoise được giải mã). */
+  openItem: (itemId: number) => call<void>("open_item", { itemId }),
 };
 
 export function formatBytes(n: number): string {
@@ -187,6 +211,36 @@ export const CATEGORY_LABEL: Record<string, string> = {
   other: "Khác",
   database: "CSDL",
 };
+
+/** Tên dễ hiểu của loại tài liệu (kind do lõi nhận diện theo nội dung). */
+export const DOC_LABEL: Record<string, string> = {
+  pdf: "PDF",
+  docx: "Word",
+  doc: "Word",
+  xlsx: "Excel",
+  xls: "Excel",
+  pptx: "PowerPoint",
+  ppt: "PowerPoint",
+  office: "Office",
+  ole: "Office (cũ)",
+  zip: "ZIP",
+  rar: "RAR",
+  "7z": "7-Zip",
+  txt: "Văn bản",
+  md: "Markdown",
+  csv: "CSV",
+  json: "JSON",
+  xml: "XML",
+  html: "HTML",
+  drawio: "draw.io",
+};
+
+export const docLabel = (kind: string) => DOC_LABEL[kind] ?? kind.toUpperCase();
+
+/** Màu biểu tượng theo nhóm tài liệu (giống màu quen thuộc của Office). */
+export const docColor = (kind: string) =>
+  ({ docx: "text-blue-600", doc: "text-blue-600", xlsx: "text-green-600", xls: "text-green-600", pptx: "text-orange-600", ppt: "text-orange-600", pdf: "text-red-600" })[kind] ??
+  "text-muted-foreground";
 
 export const AREA_LABEL: Record<string, string> = {
   picture: "Ảnh (picture)",

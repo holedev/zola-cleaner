@@ -142,9 +142,24 @@ pub struct ConversationSummary {
     pub cleanable_count: i64,
     pub cleanable_bytes: i64,
     pub last_ts: Option<i64>,
-    /// Vài ảnh mới nhất, để người dùng nhận ra hội thoại.
+    /// Vài ảnh mới nhất trong số sẽ bị dọn theo bộ lọc (riêng của hội thoại, khớp bộ lọc).
     pub thumb_ids: Vec<i64>,
+    /// Vài tài liệu / file nén mới nhất trong số sẽ bị dọn theo bộ lọc
+    /// (Zalo không giữ tên gốc trên máy → chỉ có loại, dung lượng, thời điểm).
+    pub recent_docs: Vec<DocRef>,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocRef {
+    pub id: i64,
+    pub kind: String,
+    pub size: i64,
+    pub ts: i64,
+}
+
+/// Số tài liệu gần đây trả về cho mỗi Conversation.
+const RECENT_DOCS: usize = 3;
 
 /// Danh sách Conversation, xếp theo dung lượng media dọn được. `filter` (bỏ qua `conv_ids`) quyết định cột "Dọn được".
 ///
@@ -211,8 +226,10 @@ pub fn list_conversations(
     };
 
     let mut by_conv: HashMap<&str, ConversationSummary> = HashMap::new();
-    // Ứng viên thumbnail: ảnh trong picture/, ưu tiên định dạng WebView hiển thị được (JPEG XL thì không), rồi mới nhất
+    // Ảnh / tài liệu mẫu chỉ lấy từ chính những file sẽ bị dọn (riêng + khớp bộ lọc), để người dùng thấy đúng thứ sắp mất.
+    // Ảnh: ưu tiên định dạng WebView hiển thị được (JPEG XL thì không), rồi mới nhất.
     let mut thumb_pool: HashMap<&str, Vec<(bool, i64, i64)>> = HashMap::new();
+    let mut doc_pool: HashMap<&str, Vec<DocRef>> = HashMap::new();
     for p in &pairs {
         let c = by_conv
             .entry(&p.conv)
@@ -231,6 +248,7 @@ pub fn list_conversations(
                 cleanable_bytes: 0,
                 last_ts: None,
                 thumb_ids: Vec::new(),
+                recent_docs: Vec::new(),
             });
         let own = convs_of_item[&p.item] == 1;
         c.items += 1;
@@ -249,7 +267,16 @@ pub fn list_conversations(
             }
         }
         c.last_ts = Some(c.last_ts.map_or(p.ts, |t| t.max(p.ts)));
-        if p.area == "picture" && p.category == "image" {
+        let will_clean = own && p.matches;
+        if will_clean && matches!(p.category.as_str(), "document" | "archive") {
+            doc_pool.entry(&p.conv).or_default().push(DocRef {
+                id: p.item,
+                kind: p.kind.clone(),
+                size: p.size,
+                ts: p.ts,
+            });
+        }
+        if will_clean && p.area == "picture" && p.category == "image" {
             let viewable = matches!(p.kind.as_str(), "jpg" | "png" | "gif" | "webp");
             thumb_pool
                 .entry(&p.conv)
@@ -262,6 +289,14 @@ pub fn list_conversations(
         pool.sort_unstable_by(|a, b| b.cmp(a));
         if let Some(c) = by_conv.get_mut(conv) {
             c.thumb_ids = pool.into_iter().take(thumbs).map(|(_, _, id)| id).collect();
+        }
+    }
+
+    for (conv, mut docs) in doc_pool {
+        docs.sort_unstable_by_key(|d| std::cmp::Reverse(d.ts));
+        docs.truncate(RECENT_DOCS);
+        if let Some(c) = by_conv.get_mut(conv) {
+            c.recent_docs = docs;
         }
     }
 
@@ -336,7 +371,9 @@ pub fn conversation_months(
     let mut q = db.prepare(&sql)?;
     let mut rows = q.query(params_from_iter(params))?;
 
-    let mut months: std::collections::BTreeMap<String, (MonthBucket, Vec<(bool, i64, i64)>)> =
+    // tháng → (số liệu, ứng viên ảnh mẫu: (xem được, thời điểm, id))
+    type ThumbPool = Vec<(bool, i64, i64)>;
+    let mut months: std::collections::BTreeMap<String, (MonthBucket, ThumbPool)> =
         Default::default();
     let mut shared = Bucket {
         key: "shared".into(),

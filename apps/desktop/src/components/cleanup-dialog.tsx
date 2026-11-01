@@ -1,5 +1,5 @@
 /**
- * Xác nhận → cách ly → hướng dẫn kiểm tra trong Zalo. Dùng chung cho Gợi ý và Theo hội thoại.
+ * Xác nhận → chuyển vào thùng rác → hướng dẫn kiểm tra trong Zalo. Dùng chung cho Gợi ý và Theo hội thoại.
  */
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, CATEGORY_LABEL, type CleanupFilter, errorMessage, formatBytes, type JobResult } from "@/lib/api";
+import { describeFilter, describeKept } from "@/lib/describe";
 import { useHealth, useInvalidateIndex, usePreview } from "@/lib/queries";
 
 export interface CleanupRequest {
@@ -29,7 +30,7 @@ export interface CleanupRequest {
 interface Props {
   request: CleanupRequest | null;
   onClose: () => void;
-  /** Sau khi cách ly xong, người dùng muốn sang tab Cách ly. */
+  /** Sau khi chuyển vào thùng rác, người dùng muốn sang tab Thùng rác. */
   onGoToJobs: () => void;
 }
 
@@ -46,9 +47,9 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
     if (!request) return;
     onClose();
     try {
-      const r = await blocking.run("Đang cách ly…", () => api.quarantine(request.filter), "Đang chuyển file ra khu cách ly. Đừng mở Zalo lúc này.");
+      const r = await blocking.run("Đang chuyển vào thùng rác…", () => api.quarantine(request.filter), "Đừng mở Zalo lúc này.");
       await invalidate();
-      if (r.moved === 0 && r.failed > 0) toast.error(`Không cách ly được ${r.failed} file (có thể đang bị khoá).`);
+      if (r.moved === 0 && r.failed > 0) toast.error(`Không chuyển được ${r.failed} file (có thể đang bị khoá).`);
       else setDone(r);
     } catch (e) {
       toast.error(errorMessage(e));
@@ -83,9 +84,15 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
                     )}
                   </div>
                 )}
+                {request && (
+                  <div className="text-foreground rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
+                    <b>Sẽ dọn:</b> {describeFilter(request.filter)}
+                    <div className="text-muted-foreground mt-0.5">{describeKept(request.filter)}</div>
+                  </div>
+                )}
                 <p>
-                  File được chuyển vào <b>khu cách ly</b>, chưa xoá hẳn: bạn có 7 ngày để khôi phục. Dung lượng chỉ được trả lại
-                  khi bấm <b>Giải phóng</b>.
+                  File được chuyển vào <b>thùng rác của Zola Cleaner</b>, chưa xoá hẳn: bạn có 7 ngày để khôi phục. Dung lượng chỉ
+                  được trả lại khi <b>dọn sạch thùng rác</b>.
                 </p>
                 {request?.caution && (
                   <p className="text-destructive flex gap-2">
@@ -101,7 +108,7 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
           <AlertDialogFooter>
             <AlertDialogCancel>Huỷ</AlertDialogCancel>
             <AlertDialogAction disabled={!p || p.count === 0 || zaloRunning || preview.isFetching} onClick={confirm}>
-              Cách ly {p ? formatBytes(p.bytes) : ""}
+              Chuyển {p ? formatBytes(p.bytes) : ""} vào thùng rác
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -112,22 +119,22 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <CircleCheck className="size-5 text-emerald-600" />
-              Đã cách ly {done && formatBytes(done.bytes)}
+              Đã chuyển {done && formatBytes(done.bytes)} vào thùng rác
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="grid gap-2">
                 <p>
-                  {done?.moved.toLocaleString("vi-VN")} file đã vào khu cách ly
+                  {done?.moved.toLocaleString("vi-VN")} file đã vào thùng rác
                   {done && done.failed > 0 ? ` (${done.failed} file bị khoá, giữ nguyên)` : ""}.
                 </p>
                 <ol className="list-decimal space-y-1 pl-5">
                   <li>Mở Zalo, xem thử vài hội thoại vừa dọn.</li>
                   <li>
-                    Nếu ổn, vào tab <b>Cách ly</b> bấm <b>Giải phóng ngay</b> để lấy lại dung lượng.
+                    Nếu ổn, vào tab <b>Thùng rác</b> bấm <b>Dọn sạch thùng rác</b> để lấy lại dung lượng.
                   </li>
                   <li>Nếu thiếu gì, thoát Zalo rồi bấm <b>Khôi phục</b>.</li>
                 </ol>
-                <p className="text-xs">Không làm gì thì sau 7 ngày, lần mở app kế tiếp sẽ tự giải phóng.</p>
+                <p className="text-xs">Không làm gì thì sau 7 ngày, lần mở app kế tiếp sẽ tự xoá vĩnh viễn.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -139,7 +146,7 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
                 onGoToJobs();
               }}
             >
-              Đến tab Cách ly
+              Đến Thùng rác
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -3,6 +3,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import { BlockingProvider } from "@/components/blocking";
+import { ImageViewerProvider } from "@/components/image-viewer";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./index.css";
@@ -19,7 +20,9 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <BlockingProvider>
-          <App />
+          <ImageViewerProvider>
+            <App />
+          </ImageViewerProvider>
         </BlockingProvider>
         <Toaster richColors position="bottom-right" />
       </TooltipProvider>

@@ -97,6 +97,40 @@ pub fn detect_media_stores(app_data: &Path) -> Vec<PathBuf> {
     stores
 }
 
+/// Một Account Zalo đã từng đăng nhập trên máy.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountInfo {
+    pub uid: String,
+    /// Media Store của Account, nếu Zalo đã tạo (`media\<uid>\ZaloDownloads`).
+    pub store: Option<PathBuf>,
+}
+
+/// Mọi Account trên máy: có thư mục media và / hoặc CSDL (`Database\_production\<uid>`).
+pub fn detect_accounts(app_data: &Path) -> Vec<AccountInfo> {
+    let zalo = app_data.join("ZaloData");
+    let uids_in = |dir: PathBuf| -> Vec<String> {
+        std::fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+            .filter(|n| all_digits(n))
+            .collect()
+    };
+    let mut uids = uids_in(zalo.join("media"));
+    uids.extend(uids_in(zalo.join("Database").join("_production")));
+    uids.sort();
+    uids.dedup();
+    uids.into_iter()
+        .map(|uid| {
+            let store = zalo.join("media").join(&uid).join("ZaloDownloads");
+            AccountInfo { store: store.is_dir().then_some(store), uid }
+        })
+        .collect()
+}
+
 /// uid của Account sở hữu Media Store (`media\<uid>\ZaloDownloads`), nếu đúng cấu trúc.
 pub fn account_uid(store: &Path) -> Option<String> {
     let uid = store.parent()?.file_name()?.to_str()?;

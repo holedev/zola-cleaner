@@ -65,15 +65,18 @@ Kết quả chạy thử một lựa chọn: bao nhiêu Media Item, bao nhiêu b
 _Avoid_: dry run
 
 **Quarantine Job**:
-Một lần dọn: các Media Item được chọn bị chuyển khỏi Media Store sang khu cách ly, vẫn khôi phục được.
-_Avoid_: delete job, cleanup
+Một lần dọn: các Media Item được chọn bị chuyển khỏi Media Store sang thùng rác của app, vẫn khôi phục được.
+Trên giao diện, tập hợp các Quarantine Job đang giữ file gọi là "Thùng rác" (của app — không phải Thùng rác Windows,
+vì khôi phục phải tạo lại mọi Link).
+_Avoid_: delete job, cleanup, cách ly (khó hiểu với người dùng phổ thông)
 
 **Restore**:
 Đưa mọi Media Item của một Quarantine Job về đúng các Link ban đầu.
 
 **Purge**:
-Xoá vĩnh viễn các Media Item của một Quarantine Job. Chỉ lúc này dung lượng ổ đĩa mới được giải phóng. Trên giao diện gọi là "Giải phóng".
-_Avoid_: delete, Thùng rác (app không dùng Thùng rác Windows)
+Xoá vĩnh viễn các Media Item của một Quarantine Job. Chỉ lúc này dung lượng ổ đĩa mới được giải phóng.
+Trên giao diện: "Xoá vĩnh viễn" (một job) và "Dọn sạch thùng rác" (mọi job).
+_Avoid_: delete, giải phóng
 
 **Retention**:
 Số ngày một Quarantine Job được giữ trước khi tự Purge (mặc định 7 ngày). Chỉ được thực thi khi app được mở; app không chạy nền.

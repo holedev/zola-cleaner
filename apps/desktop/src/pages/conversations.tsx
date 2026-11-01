@@ -1,8 +1,9 @@
-import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, Search, User, Users } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CalendarRange, FileText, Info, Search, User, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
 import { ConversationMonthsDialog } from "@/components/conversation-months";
+import { useImageViewer } from "@/components/image-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { api, CATEGORY_LABEL, type CleanupFilter, type Conversation, errorMessage, formatBytes, formatDate } from "@/lib/api";
+import { api, CATEGORY_LABEL, type CleanupFilter, type Conversation, docColor, docLabel, errorMessage, formatBytes, formatDate } from "@/lib/api";
+import { describeFilter, describeKept } from "@/lib/describe";
 import { useConversations, useDebounced, usePreview } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +24,7 @@ const KINDS = [
   { key: "image", label: "Ảnh", categories: ["image"], default: true },
   { key: "video", label: "Video", categories: ["video"], default: true },
   { key: "document", label: "Tài liệu", categories: ["document", "archive"], default: false },
-  { key: "other", label: "Khác", categories: ["audio", "other"], default: false },
+  { key: "other", label: "Âm thanh & khác", categories: ["audio", "other"], default: false },
 ] as const;
 
 const AGES = [
@@ -44,6 +46,9 @@ const SORT_VALUE: Record<SortKey, (c: Conversation) => number | string> = {
   lastTs: (c) => c.lastTs ?? 0,
 };
 
+/** Nhóm "Âm thanh & khác" gồm những gì — hiện khi rê chuột. */
+const OTHER_HINT = "Ghi âm, nhạc (mp3, m4a) và vài file không nhận ra loại";
+
 const COLORS = { image: "bg-blue-500", video: "bg-orange-500", document: "bg-emerald-600", other: "bg-zinc-400" };
 
 interface Props {
@@ -60,7 +65,8 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const [allConvs, setAllConvs] = useState(false);
   const [query, setQuery] = useState("");
   const [monthsFor, setMonthsFor] = useState<Conversation | null>(null);
-  const [sort, setSort] = useState<Sort>({ key: "bytes", desc: true });
+  // Mặc định sắp theo "Dọn được": đổi bộ lọc là thứ tự bảng đổi theo, thấy ngay tác dụng
+  const [sort, setSort] = useState<Sort>({ key: "cleanable", desc: true });
   const sortBy = (key: SortKey) =>
     // Bấm lại cột đang sắp → đảo chiều; cột mới → tên A→Z, số liệu lớn → nhỏ
     setSort((s) => (s.key === key ? { key, desc: !s.desc } : { key, desc: key !== "name" }));
@@ -131,7 +137,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
           <Label className="text-muted-foreground text-xs">Loại</Label>
           <div className="flex gap-4">
             {KINDS.map((k) => (
-              <Label key={k.key} className="font-normal">
+              <Label key={k.key} className="font-normal" title={k.key === "other" ? OTHER_HINT : undefined}>
                 <Checkbox
                   checked={kinds.has(k.key)}
                   onCheckedChange={() =>
@@ -193,13 +199,28 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
         </div>
       </div>
 
+      {rawBase.categories?.length ? (
+        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950 dark:border-red-900 dark:bg-red-950/30 dark:text-red-100">
+          <Info className="mt-0.5 size-4 shrink-0" />
+          <div>
+            <b>Sẽ dọn:</b> {describeFilter(rawSelection ?? { ...rawBase, convIds: allConvs ? undefined : [...selected] })}{" "}
+            <span className="text-red-900/70 dark:text-red-200/70">{describeKept(rawSelection ?? rawBase)}</span>
+            {!allConvs && selected.size === 0 && <span className="text-red-900/70"> Hãy tick hội thoại cần dọn.</span>}
+          </div>
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
           <Search className="text-muted-foreground absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input className="pl-8" placeholder="Tìm theo tên tự đặt hoặc ID…" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <span className="text-muted-foreground text-sm">
-          {rows.length} hội thoại · {formatBytes(rows.reduce((s, c) => s + c.bytes, 0))}
+          {rows.length} hội thoại · tổng {formatBytes(rows.reduce((s, c) => s + c.bytes, 0))}
+        </span>
+        <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-sm text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+          Theo bộ lọc: dọn được <b className="tabular-nums">{formatBytes(rows.reduce((s, c) => s + c.cleanableBytes, 0))}</b> ở{" "}
+          {rows.filter((c) => c.cleanableBytes > 0).length} hội thoại
         </span>
         {recalculating && (
           <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
@@ -216,10 +237,12 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
                 <Checkbox disabled={allConvs} checked={allConvs || allShownOn} onCheckedChange={toggleShown} />
               </TableHead>
               <SortHead label="Hội thoại" k="name" sort={sort} onSort={sortBy} />
-              <TableHead>Ảnh gần đây</TableHead>
+              <TableHead title="Vài ảnh trong số sẽ bị dọn theo bộ lọc. Bấm để xem.">Ảnh sẽ dọn</TableHead>
+              <TableHead title="Vài tài liệu trong số sẽ bị dọn theo bộ lọc. Bấm để mở.">Tài liệu sẽ dọn</TableHead>
               <SortHead label="Tổng" k="bytes" sort={sort} onSort={sortBy} right />
               <SortHead
                 label="Dọn được"
+                hint="theo bộ lọc"
                 k="cleanable"
                 sort={sort}
                 onSort={sortBy}
@@ -237,7 +260,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
             {convs.isPending
               ? Array.from({ length: 8 }, (_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={8}>
+                    <TableCell colSpan={9}>
                       <Skeleton className="h-12 w-full" />
                     </TableCell>
                   </TableRow>
@@ -294,7 +317,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
               onCleanup({ filter: selection, title, caution: selection.categories?.some((c) => c === "document" || c === "archive") })
             }
           >
-            {p?.count ? `Cách ly ${formatBytes(p.bytes)}` : "Cách ly"}
+            {p?.count ? `Chuyển ${formatBytes(p.bytes)} vào thùng rác` : "Chuyển vào thùng rác"}
           </Button>
         </div>
       </footer>
@@ -309,8 +332,11 @@ function SortHead({
   onSort,
   right,
   title,
+  hint,
 }: {
   label: string;
+  /** Dòng chú thích nhỏ dưới tiêu đề. */
+  hint?: string;
   k: SortKey;
   sort: Sort;
   onSort: (k: SortKey) => void;
@@ -333,6 +359,7 @@ function SortHead({
         {label}
         <Icon className={cn("size-3.5", !active && "opacity-50")} />
       </button>
+      {hint && <div className="text-muted-foreground text-[10px] leading-none font-normal">{hint}</div>}
     </TableHead>
   );
 }
@@ -343,7 +370,7 @@ function Legend() {
       {(["image", "video", "document", "other"] as const).map((k) => (
         <span key={k} className="flex items-center gap-1">
           <span className={cn("size-2 rounded-sm", COLORS[k])} />
-          {CATEGORY_LABEL[k]}
+          {k === "other" ? <span title={OTHER_HINT}>Âm thanh & khác</span> : CATEGORY_LABEL[k]}
         </span>
       ))}
     </div>
@@ -379,6 +406,14 @@ function Row({
     }
   };
   const part = (bytes: number) => ({ width: `${(bytes / max) * 100}%` });
+  const view = useImageViewer();
+  const openDoc = async (id: number) => {
+    try {
+      await api.openItem(id);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
 
   return (
     <TableRow data-state={checked ? "selected" : undefined}>
@@ -407,17 +442,42 @@ function Row({
           <span className="font-mono">{c.convId}</span>
         </div>
       </TableCell>
-      <TableCell onClick={disabled ? undefined : onToggle} className="cursor-pointer">
+      <TableCell>
         <div className="flex gap-1">
-          {c.thumbIds.map((id) => (
-            <img
+          {c.thumbIds.map((id, i) => (
+            <button
               key={id}
-              src={api.thumbUrl(id)}
-              loading="lazy"
-              alt=""
-              className="bg-muted size-10 rounded object-cover"
-              onError={(e) => (e.currentTarget.style.visibility = "hidden")}
-            />
+              type="button"
+              title="Xem ảnh"
+              className="focus-visible:ring-ring rounded outline-none focus-visible:ring-2"
+              onClick={() => view(c.thumbIds, i, c.alias || c.convId)}
+            >
+              <img
+                src={api.thumbUrl(id)}
+                loading="lazy"
+                alt=""
+                className="bg-muted size-10 rounded object-cover transition hover:brightness-90"
+                onError={(e) => (e.currentTarget.style.visibility = "hidden")}
+              />
+            </button>
+          ))}
+        </div>
+      </TableCell>
+      <TableCell>
+        <div className="flex flex-col gap-0.5">
+          {c.recentDocs.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => openDoc(d.id)}
+              title={`Mở · ${formatDate(d.ts)}`}
+              className="hover:bg-muted flex items-center gap-1.5 rounded px-1 text-left text-xs"
+            >
+              <FileText className={cn("size-3.5 shrink-0", docColor(d.kind))} />
+              <span className="font-medium">{docLabel(d.kind)}</span>
+              <span className="text-muted-foreground tabular-nums">{formatBytes(d.size)}</span>
+              <span className="text-muted-foreground">{formatDate(d.ts)}</span>
+            </button>
           ))}
         </div>
       </TableCell>
@@ -428,7 +488,7 @@ function Row({
       <TableCell>
         <div
           className="bg-muted flex h-2 overflow-hidden rounded-full"
-          title={`Ảnh ${formatBytes(c.imageBytes)} · Video ${formatBytes(c.videoBytes)} · Tài liệu ${formatBytes(c.documentBytes)} · Khác ${formatBytes(c.otherBytes)}`}
+          title={`Ảnh ${formatBytes(c.imageBytes)} · Video ${formatBytes(c.videoBytes)} · Tài liệu ${formatBytes(c.documentBytes)} · Âm thanh & khác ${formatBytes(c.otherBytes)}`}
         >
           <span className={COLORS.image} style={part(c.imageBytes)} />
           <span className={COLORS.video} style={part(c.videoBytes)} />

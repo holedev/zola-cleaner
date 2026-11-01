@@ -199,7 +199,7 @@ fn quet_hardlink_khong_dem_trung_gan_dung_hoi_thoai_giai_xor() {
     assert_eq!(c2.bytes, 200 + 50 + 400); // gộp picture/222_group và resource/g222
     assert_eq!(c2.own_bytes, 50 + 400);
     assert_eq!(convs.len(), 2);
-    assert_eq!(c1.thumb_ids.len(), 2);
+    assert_eq!(c1.thumb_ids.len(), 1); // chỉ a sẽ bị dọn (b dùng chung với g222)
 
     // Quét lại: không đổi gì
     let again = s.rescan();
@@ -440,7 +440,7 @@ fn duong_dan_dai_hon_260_ky_tu() {
 fn jpeg_xl_thanh_thumbnail_jpeg_canh_dai_320() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/gray-640x400.jxl");
     assert_eq!(detect(&fs::read(&src).unwrap(), "").kind, "jxl");
-    let jpg = jxl_to_jpeg(&src, 320).unwrap();
+    let jpg = jxl_to_jpeg(&src, 320, 75).unwrap();
     assert_eq!(detect(&jpg, "").kind, "jpg");
     // SOF0/SOF2 chứa kích thước: tìm marker FF C0 / FF C2 rồi đọc chiều cao/rộng
     let sof = jpg
@@ -530,4 +530,121 @@ fn don_mot_hoi_thoai_tu_mot_thang_tro_ve_truoc() {
     )
     .unwrap();
     assert_eq!(p.count, 0);
+}
+
+#[test]
+fn quet_lai_nhan_dien_lai_file_chua_ro_loai() {
+    let s = setup();
+    // Giả lập file đã quét bằng bản nhận diện cũ, chưa biết loại
+    s.db.execute(
+        "UPDATE items SET category = 'other', kind = '' WHERE area = 'fileNoise'",
+        [],
+    )
+    .unwrap();
+    let p = s.rescan();
+    assert_eq!(p.new_files + p.changed, 0); // không tính là file mới / đổi
+    let (cat, kind): (String, String) =
+        s.db.query_row(
+            "SELECT category, kind FROM items WHERE area = 'fileNoise'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((cat.as_str(), kind.as_str()), ("document", "pdf"));
+}
+
+#[test]
+fn tai_lieu_gan_day_va_mo_file() {
+    use zc_core::thumbs::{materialize, render_view};
+    let s = setup();
+    // Mặc định (ảnh + video) → không có tài liệu nào sẽ bị dọn
+    let convs = list_conversations(&s.db, &s.filter(&[]), 8).unwrap();
+    assert!(convs.iter().find(|c| c.conv_id == "111").unwrap().recent_docs.is_empty());
+    let docs = CleanupFilter { categories: Some(vec!["document".into()]), ..s.filter(&[]) };
+    let convs = list_conversations(&s.db, &docs, 8).unwrap();
+    let c1 = convs.iter().find(|c| c.conv_id == "111").unwrap();
+    assert_eq!(c1.recent_docs.len(), 1);
+    let doc = &c1.recent_docs[0];
+    assert_eq!((doc.kind.as_str(), doc.size), ("pdf", 800));
+
+    // Tài liệu trong fileNoise/ được giải XOR ra bản tạm có đuôi .pdf; file của Zalo không bị đụng
+    let out = s.store.parent().unwrap().join("open");
+    let opened = materialize(&s.db, doc.id, &out).unwrap();
+    assert_eq!(opened.extension().unwrap(), "pdf");
+    assert!(fs::read(&opened).unwrap().starts_with(b"%PDF-1.7"));
+    assert!(!opened.starts_with(&s.store));
+
+    // Ảnh jpg: xem bằng chính file gốc (Link kho), không phải Thumbnail của Zalo
+    let a = render_view(&s.db, s.item_id_of("picture/111/za_a.jpg"), &out)
+        .unwrap()
+        .unwrap();
+    assert_eq!(a.file, s.a);
+    // Video chưa xem trong app được
+    assert!(
+        render_view(&s.db, s.item_id_of("video/group/123"), &out)
+            .unwrap()
+            .is_none()
+    );
+}
+
+/// Định dạng thật của fileNoise/: chỉ 100 byte đầu bị XOR, cuối file có thêm đuôi `\x07zAlO\x07`.
+fn zalo_noise(plain: &[u8]) -> Vec<u8> {
+    let mut raw = plain.to_vec();
+    raw.iter_mut().take(100).for_each(|b| *b ^= NOISE_KEY);
+    raw.extend_from_slice(b"\x07zAlO\x07");
+    raw
+}
+
+#[test]
+fn file_noise_chi_xor_100_byte_dau_va_co_duoi() {
+    use zc_core::thumbs::materialize;
+    let s = setup();
+    let mut pdf = b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n".to_vec();
+    pdf.extend(std::iter::repeat_n(b'A', 300));
+    pdf.extend_from_slice(b"\n%%EOF\n");
+    let raw = zalo_noise(&pdf);
+    let f = put(&s.store, "fileNoise/realpdf", &raw, raw.len());
+    link(&s.store, &f, "resource/444/fileNoise/1600000000007_sender_444");
+
+    // docx có mục đầu là docProps/ (không phải word/) — chỉ thư mục trung tâm ở cuối file cho biết là Word
+    let mut docx = b"PK\x03\x04".to_vec();
+    docx.extend([0u8; 22]);
+    docx.extend([16, 0, 0, 0]); // độ dài tên = 16
+    docx.extend_from_slice(b"docProps/app.xml");
+    docx.extend([0u8; 200]);
+    docx.extend_from_slice(b"PK\x01\x02word/document.xmlPK\x05\x06");
+    let rawx = zalo_noise(&docx);
+    let x = put(&s.store, "fileNoise/realdocx", &rawx, rawx.len());
+    link(&s.store, &x, "resource/444/fileNoise/1600000000008_sender_444");
+    s.rescan();
+
+    let kind_of = |rel: &str| -> String {
+        s.db.query_row("SELECT kind FROM items WHERE id = ?", [s.item_id_of(rel)], |r| r.get(0)).unwrap()
+    };
+    assert_eq!(kind_of("fileNoise/realpdf"), "pdf");
+    assert_eq!(kind_of("fileNoise/realdocx"), "docx");
+
+    let out = s.store.parent().unwrap().join("open");
+    let opened = materialize(&s.db, s.item_id_of("fileNoise/realpdf"), &out).unwrap();
+    assert_eq!(fs::read(&opened).unwrap(), pdf); // đúng từng byte: không XOR phần sau, không còn đuôi
+    let opened = materialize(&s.db, s.item_id_of("fileNoise/realdocx"), &out).unwrap();
+    assert_eq!(opened.extension().unwrap(), "docx");
+    assert_eq!(fs::read(&opened).unwrap(), docx);
+}
+
+#[test]
+fn tim_moi_tai_khoan_zalo_tren_may() {
+    use zc_core::layout::detect_accounts;
+    let dir = tempfile::tempdir().unwrap();
+    let z = dir.path().join("ZaloData");
+    fs::create_dir_all(z.join("media/111/ZaloDownloads")).unwrap();
+    fs::create_dir_all(z.join("media/temp")).unwrap(); // không phải tài khoản
+    fs::create_dir_all(z.join("Database/_production/111")).unwrap();
+    fs::create_dir_all(z.join("Database/_production/222")).unwrap(); // đăng nhập nhưng chưa có media
+    fs::create_dir_all(z.join("Database/_production/Encrypt")).unwrap();
+
+    let acc = detect_accounts(dir.path());
+    assert_eq!(acc.iter().map(|a| a.uid.as_str()).collect::<Vec<_>>(), ["111", "222"]);
+    assert!(acc[0].store.is_some());
+    assert!(acc[1].store.is_none());
 }

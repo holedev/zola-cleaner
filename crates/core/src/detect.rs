@@ -70,6 +70,12 @@ pub const HEADER_BYTES: usize = 64;
 /// Khoá XOR Zalo dùng để "làm nhiễu" tài liệu trong thư mục fileNoise/.
 pub const NOISE_KEY: u8 = 0x93;
 
+/// Zalo chỉ XOR [`NOISE_PREFIX`] byte đầu của file trong fileNoise/; phần sau giữ nguyên.
+pub const NOISE_PREFIX: usize = 100;
+
+/// Đuôi Zalo gắn thêm vào cuối file trong fileNoise/ — không thuộc nội dung tài liệu.
+pub const NOISE_TRAILER: &[u8] = b"\x07zAlO\x07";
+
 const HEIF_BRANDS: [&[u8]; 8] = [
     b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1", b"avif", b"avis",
 ];
@@ -218,13 +224,88 @@ pub fn detect(h: &[u8], ext: &str) -> Detection {
         return d(Archive, "7z");
     }
 
+    // Không có chữ ký nhị phân: tài liệu văn bản (Markdown, JSON, XML, CSV…) gửi qua chat
+    if let Some(kind) = text_kind(h) {
+        return d(Document, kind);
+    }
+
     d(Other, ext.strip_prefix('.').unwrap_or(ext))
 }
 
-/// Nhận diện file trong fileNoise/: giải XOR từng byte với [`NOISE_KEY`] rồi nhận diện như thường.
+/// Header là văn bản UTF-8 (cho phép BOM, cho phép ký tự cuối bị cắt dở) → đoán định dạng văn bản.
+fn text_kind(h: &[u8]) -> Option<&'static str> {
+    let h = h.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(h);
+    let text = match std::str::from_utf8(h) {
+        Ok(t) => t,
+        // Header cắt ngang một ký tự nhiều byte ở cuối → vẫn là văn bản
+        Err(e) if e.error_len().is_none() => std::str::from_utf8(&h[..e.valid_up_to()]).ok()?,
+        Err(_) => return None,
+    };
+    if text.chars().count() < 4
+        || text
+            .chars()
+            .any(|c| c.is_control() && !matches!(c, '\t' | '\n' | '\r' | '\x0c'))
+    {
+        return None;
+    }
+    let t = text.trim_start();
+    let lower = t.get(..t.len().min(16)).unwrap_or(t).to_ascii_lowercase();
+    let first_line = t.lines().next().unwrap_or("");
+    Some(if t.starts_with("<mxfile") {
+        "drawio"
+    } else if lower.starts_with("<?xml") {
+        "xml"
+    } else if lower.starts_with("<!doctype html") || lower.starts_with("<html") {
+        "html"
+    } else if t.starts_with('{') || t.starts_with('[') {
+        "json"
+    } else if t.starts_with("---") || t.starts_with("# ") {
+        "md"
+    } else if t.starts_with("sep=") || first_line.matches(',').count() >= 2 {
+        "csv"
+    } else {
+        "txt"
+    })
+}
+
+/// Nhận diện file trong fileNoise/: giải XOR phần đầu với [`NOISE_KEY`] rồi nhận diện như thường.
 pub fn detect_noise(header: &[u8], ext: &str) -> Detection {
-    let plain: Vec<u8> = header.iter().map(|b| b ^ NOISE_KEY).collect();
+    let mut plain = header.to_vec();
+    unnoise_prefix(&mut plain, 0);
     detect(&plain, ext)
+}
+
+/// Giải XOR tại chỗ một đoạn bắt đầu ở vị trí `offset` của file fileNoise/ (chỉ phần nằm trong [`NOISE_PREFIX`]).
+pub fn unnoise_prefix(buf: &mut [u8], offset: usize) {
+    let end = NOISE_PREFIX.saturating_sub(offset).min(buf.len());
+    buf[..end].iter_mut().for_each(|b| *b ^= NOISE_KEY);
+}
+
+/// Loại cụ thể của file Office / ZIP, dựa vào tên các mục ZIP (thư mục trung tâm nằm ở cuối file)
+/// hoặc tên stream của file Office đời cũ (OLE). `head` / `tail` là phần đầu / cuối file đã giải mã.
+pub fn refine_container(kind: &str, head: &[u8], tail: &[u8]) -> Option<&'static str> {
+    let has = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
+    let utf16 = |s: &str| s.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<u8>>();
+    match kind {
+        "zip" | "office" | "docx" | "xlsx" | "pptx" => {
+            for (needle, k) in [(&b"word/"[..], "docx"), (b"xl/", "xlsx"), (b"ppt/", "pptx")] {
+                if has(tail, needle) || has(head, needle) {
+                    return Some(k);
+                }
+            }
+            None
+        }
+        "ole" => {
+            for (name, k) in [("WordDocument", "doc"), ("Workbook", "xls"), ("PowerPoint Document", "ppt")] {
+                let n = utf16(name);
+                if has(head, &n) || has(tail, &n) {
+                    return Some(k);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -340,7 +421,31 @@ mod tests {
 
     #[test]
     fn khong_ro_thanh_other_giu_duoi_file() {
-        assert_eq!(detect(b"hello world", ".txt"), Detection::new(Other, "txt"));
+        assert_eq!(
+            detect(&[0x00, 0x01, 0x02, 0x03, 0xfe], ".bin"),
+            Detection::new(Other, "bin")
+        );
         assert_eq!(detect(&[], ""), Detection::new(Other, ""));
+    }
+
+    #[test]
+    fn van_ban_la_tai_lieu() {
+        let k = |s: &[u8]| detect(s, "").kind;
+        assert_eq!(detect(b"---\ntitle: Ghi chu", "").category, Document);
+        assert_eq!(k(b"---\ntitle: Ghi chu"), "md");
+        assert_eq!(k(b"{\n  \"name\": 1"), "json");
+        assert_eq!(k(b"<?xml version=\"1.0\"?>"), "xml");
+        assert_eq!(k(b"<!DOCTYPE html><html>"), "html");
+        assert_eq!(k(b"<mxfile host=\"app\">"), "drawio");
+        assert_eq!(k(b"Order,PID,Qty\r\n1,2,3"), "csv");
+        assert_eq!(k("Chào bạn, đây là ghi chú".as_bytes()), "txt");
+        // BOM + chữ có dấu bị cắt ngang ở cuối header vẫn là văn bản
+        let mut cut = vec![0xef, 0xbb, 0xbf];
+        cut.extend_from_slice("Tiếng Việt".as_bytes());
+        cut.extend_from_slice(&"ệ".as_bytes()[..2]);
+        assert_eq!(k(&cut), "txt");
+        // fileNoise: văn bản bị XOR
+        let noisy: Vec<u8> = b"dev tunnel\n".iter().map(|b| b ^ NOISE_KEY).collect();
+        assert_eq!(detect_noise(&noisy, ""), Detection::new(Document, "txt"));
     }
 }

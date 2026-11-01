@@ -13,7 +13,12 @@ use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 
 use crate::db::{Db, get_root, now_ms, tx};
-use crate::detect::{Detection, HEADER_BYTES, detect, detect_noise};
+use crate::detect::{
+    Category, Detection, HEADER_BYTES, detect, detect_noise, refine_container, unnoise_prefix,
+};
+
+/// Số byte đọc thêm ở đầu và cuối file ZIP / Office để biết loại cụ thể.
+const CONTAINER_PROBE: usize = 64 * 1024;
 use crate::error::{Error, Result};
 use crate::fsx;
 use crate::layout::{RESCACHE_NAME, parse_link};
@@ -147,10 +152,22 @@ fn run(
     let volume = fsx::volume_serial(root)?;
 
     // 1. Liệt kê: mọi Link + một ứng viên Media Item cho mỗi file id
-    let known: HashMap<String, (i64, i64)> = {
-        let mut q = db.prepare("SELECT file_key, size, mtime_ms FROM items WHERE root_id = ?")?;
-        q.query_map([root_id], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?))))?
-            .collect::<rusqlite::Result<_>>()?
+    // file_key → (size, mtime, nhận diện lại). Media Item chưa rõ loại ('other', ZIP / Office chung chung) được đọc lại mỗi lần quét:
+    // số lượng nhỏ, và nhờ vậy cải tiến nhận diện có hiệu lực mà không cần quét lại từ đầu.
+    let known: HashMap<String, (i64, i64, bool)> = {
+        let mut q = db.prepare(
+            "SELECT file_key, size, mtime_ms, category = 'other' OR kind IN ('zip', 'office', 'ole') FROM items WHERE root_id = ?",
+        )?;
+        q.query_map([root_id], |r| {
+            Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?)))
+        })?
+        .collect::<rusqlite::Result<_>>()?
+    };
+    let same = |key: &str, size: i64, mtime: i64| {
+        known.get(key).is_some_and(|k| k.0 == size && k.1 == mtime)
+    };
+    let needs_read = |key: &str, size: i64, mtime: i64| {
+        !same(key, size, mtime) || known.get(key).is_some_and(|k| k.2)
     };
     let mut links: Vec<LinkRow> = Vec::new();
     let mut items: Vec<ItemRow> = Vec::new();
@@ -192,7 +209,7 @@ fn run(
                 index.insert(key.clone(), items.len());
                 p.bytes += e.size;
                 let size = e.size as i64;
-                let unchanged = known.get(&key) == Some(&(size, e.mtime_ms));
+                let unchanged = same(&key, size, e.mtime_ms);
                 items.push(ItemRow {
                     key: key.clone(),
                     abs,
@@ -229,7 +246,7 @@ fn run(
     let errors = AtomicU64::new(0);
     items
         .par_iter_mut()
-        .filter(|it| known.get(&it.key) != Some(&(it.size, it.mtime_ms)))
+        .filter(|it| needs_read(&it.key, it.size, it.mtime_ms))
         .for_each(|it| {
             if cancelled() {
                 return;
@@ -241,11 +258,20 @@ fn run(
                         .extension()
                         .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
                         .unwrap_or_default();
-                    it.detection = Some(if it.area == "fileNoise" {
-                        detect_noise(&h, &ext)
-                    } else {
-                        detect(&h, &ext)
-                    });
+                    let noise = it.area == "fileNoise";
+                    let mut d = if noise { detect_noise(&h, &ext) } else { detect(&h, &ext) };
+                    // ZIP / Office: 64 byte đầu chưa đủ biết là Word, Excel hay PowerPoint → đọc thêm đầu + cuối file
+                    if matches!(d.kind.as_str(), "zip" | "office" | "ole")
+                        && let Ok((mut head, tail)) = fsx::read_head_tail(&it.abs, CONTAINER_PROBE)
+                    {
+                        if noise {
+                            unnoise_prefix(&mut head, 0);
+                        }
+                        if let Some(k) = refine_container(&d.kind, &head, &tail) {
+                            d = Detection { category: Category::Document, kind: k.to_owned() };
+                        }
+                    }
+                    it.detection = Some(d);
                 }
                 Err(_) => {
                     errors.fetch_add(1, Ordering::Relaxed); // file bị khoá, đường dẫn hỏng...

@@ -112,36 +112,56 @@ pub fn find_thumbnail(db: &Db, item_id: i64) -> Result<Option<ThumbSource>> {
     Ok(None)
 }
 
-/// Thumbnail JXL đang được giải mã, theo file cache → nhiều request cùng ảnh chỉ giải mã một lần.
+/// Ảnh JXL đang được giải mã, theo file cache → nhiều request cùng ảnh chỉ giải mã một lần.
 static RENDERING: LazyLock<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>> =
     LazyLock::new(Default::default);
 
-/// Như [`find_thumbnail`], nhưng ảnh JPEG XL được giải mã và thu nhỏ thành JPEG, lưu vào `cache_dir` để lần sau dùng lại.
-/// Chạy đồng bộ, nặng CPU: gọi từ luồng nền.
-pub fn render_thumbnail(db: &Db, item_id: i64, cache_dir: &Path) -> Result<Option<ThumbSource>> {
-    if let Some(direct) = find_thumbnail(db, item_id)? {
-        return Ok(Some(direct));
-    }
-    let Some((kind, size, mtime, src)) = db
+/// Cạnh dài nhất khi xem ảnh lớn, px.
+pub const VIEW_SIZE: u32 = 1600;
+
+/// Thông tin một Media Item cần để hiển thị / mở.
+struct ItemFile {
+    kind: String,
+    category: String,
+    area: String,
+    size: i64,
+    mtime: i64,
+    /// Link đầu tiên (đường dẫn tuyệt đối).
+    src: Option<PathBuf>,
+}
+
+fn item_file(db: &Db, item_id: i64) -> Result<Option<ItemFile>> {
+    Ok(db
         .query_row(
-            "SELECT i.kind, i.size, i.mtime_ms, r.path, (SELECT rel_path FROM links WHERE item_id = i.id LIMIT 1)
-             FROM items i JOIN roots r ON r.id = i.root_id WHERE i.id = ? AND i.category = 'image'",
+            "SELECT i.kind, i.category, i.area, i.size, i.mtime_ms, r.path,
+               (SELECT rel_path FROM links WHERE item_id = i.id ORDER BY rel_path LIKE 'resource/%', rel_path LIMIT 1)
+             FROM items i JOIN roots r ON r.id = i.root_id WHERE i.id = ? AND i.status = 'present'",
             [item_id],
             |r| {
-                let root: String = r.get(3)?;
-                let rel: Option<String> = r.get(4)?;
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, rel.map(|rel| abs_of(&root, &rel))))
+                let root: String = r.get(5)?;
+                let rel: Option<String> = r.get(6)?;
+                Ok(ItemFile {
+                    kind: r.get(0)?,
+                    category: r.get(1)?,
+                    area: r.get(2)?,
+                    size: r.get(3)?,
+                    mtime: r.get(4)?,
+                    src: rel.map(|rel| abs_of(&root, &rel)),
+                })
             },
         )
-        .optional()?
-    else {
-        return Ok(None);
-    };
-    let Some(src) = src.filter(|_| kind == "jxl") else {
-        return Ok(None);
-    };
+        .optional()?)
+}
 
-    let cached = cache_dir.join(format!("{item_id}-{size}-{mtime}.jpg"));
+/// Giải mã JXL thành JPEG cạnh dài ≤ `size`, lưu `cache_dir/<name>`; đã có thì dùng lại.
+fn jxl_cached(
+    src: &Path,
+    cache_dir: &Path,
+    name: String,
+    size: u32,
+    quality: u8,
+) -> Result<ThumbSource> {
+    let cached = cache_dir.join(name);
     let lock = RENDERING
         .lock()
         .unwrap()
@@ -151,7 +171,7 @@ pub fn render_thumbnail(db: &Db, item_id: i64, cache_dir: &Path) -> Result<Optio
     {
         let _guard = lock.lock().unwrap();
         if !cached.exists() {
-            let jpg = jxl_to_jpeg(&src, THUMB_SIZE)?;
+            let jpg = jxl_to_jpeg(src, size, quality)?;
             fs::create_dir_all(cache_dir)?;
             let tmp = cached.with_extension("tmp");
             fs::write(&tmp, jpg)?;
@@ -159,14 +179,130 @@ pub fn render_thumbnail(db: &Db, item_id: i64, cache_dir: &Path) -> Result<Optio
         }
     }
     RENDERING.lock().unwrap().remove(&cached);
-    Ok(Some(ThumbSource {
+    Ok(ThumbSource {
         file: cached,
         content_type: "image/jpeg",
-    }))
+    })
 }
 
-/// Giải mã JPEG XL, thu nhỏ để cạnh dài nhất ≤ `size`, mã hoá JPEG chất lượng 75.
-pub fn jxl_to_jpeg(src: &Path, size: u32) -> Result<Vec<u8>> {
+/// Như [`find_thumbnail`], nhưng ảnh JPEG XL được giải mã và thu nhỏ thành JPEG, lưu vào `cache_dir` để lần sau dùng lại.
+/// Chạy đồng bộ, nặng CPU: gọi từ luồng nền.
+pub fn render_thumbnail(db: &Db, item_id: i64, cache_dir: &Path) -> Result<Option<ThumbSource>> {
+    if let Some(direct) = find_thumbnail(db, item_id)? {
+        return Ok(Some(direct));
+    }
+    let Some(f) = item_file(db, item_id)? else {
+        return Ok(None);
+    };
+    match (&f.src, f.category.as_str(), f.kind.as_str()) {
+        (Some(src), "image", "jxl") => Ok(Some(jxl_cached(
+            src,
+            cache_dir,
+            format!("{item_id}-{}-{}.jpg", f.size, f.mtime),
+            THUMB_SIZE,
+            75,
+        )?)),
+        _ => Ok(None),
+    }
+}
+
+/// Ảnh cỡ lớn để xem: chính file gốc nếu WebView hiển thị được, JPEG XL thì giải mã (≤ [`VIEW_SIZE`]).
+/// Không dùng Thumbnail của Zalo (quá nhỏ).
+pub fn render_view(db: &Db, item_id: i64, cache_dir: &Path) -> Result<Option<ThumbSource>> {
+    let Some(f) = item_file(db, item_id)? else {
+        return Ok(None);
+    };
+    let Some(src) = f.src.filter(|_| f.category == "image") else {
+        return Ok(None);
+    };
+    if let Some(ct) = browser_image(&f.kind) {
+        return Ok(Some(ThumbSource {
+            file: src,
+            content_type: ct,
+        }));
+    }
+    if f.kind == "jxl" {
+        let name = format!("{item_id}-{}-{}-view.jpg", f.size, f.mtime);
+        return Ok(Some(jxl_cached(&src, cache_dir, name, VIEW_SIZE, 85)?));
+    }
+    Ok(None)
+}
+
+/// Tạo một bản của Media Item, có đúng đuôi file, trong `out_dir` để mở bằng ứng dụng mặc định của Windows.
+/// File trong fileNoise/ được giải XOR; file khác được chép (file của Zalo thường không có đuôi).
+/// Không bao giờ trả về chính file trong Media Store: ứng dụng khác không được sửa / khoá file của Zalo.
+pub fn materialize(db: &Db, item_id: i64, out_dir: &Path) -> Result<PathBuf> {
+    use std::io::{Read, Write};
+    let f = item_file(db, item_id)?.ok_or_else(|| Error::Msg("Không tìm thấy file".into()))?;
+    if matches!(f.category.as_str(), "database" | "other") || f.kind.is_empty() {
+        return Err(Error::Msg("Không mở được loại file này".into()));
+    }
+    let src = f
+        .src
+        .ok_or_else(|| Error::Msg("File không còn trên đĩa".into()))?;
+    // Đuôi lấy từ loại đã nhận diện; "ole" là Office đời cũ (doc/xls/ppt) — Windows tự chọn ứng dụng theo .doc
+    let ext = match f.kind.as_str() {
+        "ole" => "doc",
+        "office" => "docx",
+        k => k,
+    };
+    fs::create_dir_all(out_dir)?;
+    let out = out_dir.join(format!("{item_id}.{ext}"));
+    let tmp = out.with_extension("part");
+    {
+        use crate::detect::{NOISE_TRAILER, unnoise_prefix};
+        let noise = f.area == "fileNoise";
+        let file = fs::File::open(&src)?;
+        let len = file.metadata()?.len();
+        // fileNoise/: bỏ đuôi Zalo gắn thêm (nếu có) để tài liệu nguyên vẹn như lúc gửi
+        let keep = if noise && ends_with(&src, len, NOISE_TRAILER)? {
+            len - NOISE_TRAILER.len() as u64
+        } else {
+            len
+        };
+        let mut r = BufReader::new(file).take(keep);
+        let mut w = std::io::BufWriter::new(fs::File::create(&tmp)?);
+        let mut buf = vec![0u8; 1 << 20];
+        let mut offset = 0usize;
+        loop {
+            let n = r.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            if noise {
+                unnoise_prefix(&mut buf[..n], offset); // chỉ 100 byte đầu bị XOR
+            }
+            offset += n;
+            w.write_all(&buf[..n])?;
+        }
+        w.flush()?;
+    }
+    // Bản cũ đang mở trong ứng dụng khác thì không thay được — dùng luôn bản cũ (cùng nội dung)
+    match fs::rename(&tmp, &out) {
+        Ok(()) => {}
+        Err(_) if out.exists() => {
+            let _ = fs::remove_file(&tmp);
+        }
+        Err(e) => return Err(e.into()),
+    }
+    Ok(out)
+}
+
+/// File (dài `len`) có kết thúc bằng `suffix` không.
+fn ends_with(path: &Path, len: u64, suffix: &[u8]) -> Result<bool> {
+    use std::io::{Read, Seek, SeekFrom};
+    if len < suffix.len() as u64 {
+        return Ok(false);
+    }
+    let mut f = fs::File::open(path)?;
+    f.seek(SeekFrom::Start(len - suffix.len() as u64))?;
+    let mut tail = vec![0u8; suffix.len()];
+    f.read_exact(&mut tail)?;
+    Ok(tail == suffix)
+}
+
+/// Giải mã JPEG XL, thu nhỏ để cạnh dài nhất ≤ `size`, mã hoá JPEG chất lượng `quality`.
+pub fn jxl_to_jpeg(src: &Path, size: u32, quality: u8) -> Result<Vec<u8>> {
     let img_err = |e: image::ImageError| Error::Msg(format!("Không giải mã được ảnh: {e}"));
     let decoder = JxlDecoder::new(BufReader::new(fs::File::open(src)?)).map_err(img_err)?;
     let img = DynamicImage::from_decoder(decoder).map_err(img_err)?;
@@ -176,7 +312,7 @@ pub fn jxl_to_jpeg(src: &Path, size: u32) -> Result<Vec<u8>> {
         img
     };
     let mut out = Vec::new();
-    JpegEncoder::new_with_quality(&mut out, 75)
+    JpegEncoder::new_with_quality(&mut out, quality)
         .encode_image(&small.to_rgb8())
         .map_err(img_err)?;
     Ok(out)

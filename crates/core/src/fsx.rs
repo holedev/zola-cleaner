@@ -217,3 +217,17 @@ pub fn read_header(path: &Path, n: usize) -> io::Result<Vec<u8>> {
     File::open(path)?.take(n as u64).read_to_end(&mut buf)?;
     Ok(buf)
 }
+
+/// Đọc tối đa `n` byte đầu và `n` byte cuối file (trùng nhau nếu file nhỏ).
+pub fn read_head_tail(path: &Path, n: usize) -> io::Result<(Vec<u8>, Vec<u8>)> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = File::open(path)?;
+    let len = f.metadata()?.len();
+    let mut head = Vec::with_capacity(n);
+    (&mut f).take(n as u64).read_to_end(&mut head)?;
+    let start = len.saturating_sub(n as u64);
+    f.seek(SeekFrom::Start(start))?;
+    let mut tail = Vec::with_capacity(n);
+    f.take(n as u64).read_to_end(&mut tail)?;
+    Ok((head, tail))
+}

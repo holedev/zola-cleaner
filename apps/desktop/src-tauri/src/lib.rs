@@ -56,6 +56,8 @@ type CmdResult<T> = Result<T, CmdError>;
 struct Paths {
     db: PathBuf,
     thumbs: PathBuf,
+    /// Bản tạm (giải XOR, có đuôi file) để mở bằng ứng dụng khác; xoá mỗi lần mở app.
+    open: PathBuf,
     quarantine: PathBuf,
 }
 
@@ -67,6 +69,8 @@ struct Runtime {
     busy: bool,
     /// Job tự giải phóng lúc khởi động (hết Retention), để giao diện báo lại.
     auto_purged: Vec<JobResult>,
+    /// uid của tài khoản Zalo mới phát hiện lúc khởi động (không tính lần chạy đầu tiên).
+    new_accounts: Vec<String>,
 }
 
 struct AppState {
@@ -153,6 +157,22 @@ async fn health(state: AppStateRef<'_>) -> CmdResult<Health> {
 #[tauri::command]
 fn take_auto_purged(state: AppStateRef<'_>) -> Vec<JobResult> {
     std::mem::take(&mut state.rt.lock().unwrap().auto_purged)
+}
+
+#[tauri::command]
+fn take_new_accounts(state: AppStateRef<'_>) -> Vec<String> {
+    std::mem::take(&mut state.rt.lock().unwrap().new_accounts)
+}
+
+/// Mọi tài khoản Zalo trên máy (kể cả chưa có thư mục media).
+#[tauri::command]
+async fn accounts() -> CmdResult<Vec<layout::AccountInfo>> {
+    blocking(|| {
+        Ok(std::env::var_os("APPDATA")
+            .map(|a| layout::detect_accounts(Path::new(&a)))
+            .unwrap_or_default())
+    })
+    .await
 }
 
 // --- Media Store ---
@@ -392,6 +412,17 @@ async fn purge(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
     .await
 }
 
+/// Mở một Media Item bằng ứng dụng mặc định của Windows (PDF, Word, ảnh…), qua một bản tạm.
+#[tauri::command]
+async fn open_item(app: AppHandle, state: AppStateRef<'_>, item_id: i64) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let s = state.inner().clone();
+    let path = blocking(move || Ok(thumbs::materialize(&s.db()?, item_id, &s.paths.open)?)).await?;
+    app.opener()
+        .open_path(path.to_string_lossy(), None::<&str>)
+        .map_err(|e| CmdError::new("user", format!("Không mở được file: {e}")))
+}
+
 // --- Báo cáo / nhật ký ---
 
 #[tauri::command]
@@ -466,18 +497,31 @@ fn app_paths() -> Paths {
     Paths {
         db: data.join("zola-cleaner.db"),
         thumbs: local.join("zola-cleaner").join("thumbs"),
+        open: local.join("zola-cleaner").join("open"),
         quarantine: quarantine::default_quarantine_base(&roaming),
     }
 }
 
-/// Tạo CSDL, tự thêm Media Store tìm thấy, tự giải phóng job hết Retention.
-fn init(paths: &Paths) -> zc_core::Result<Vec<JobResult>> {
+struct Startup {
+    purged: Vec<JobResult>,
+    new_accounts: Vec<String>,
+}
+
+/// Tạo CSDL, tự thêm Media Store của mọi tài khoản tìm thấy (mỗi lần mở app), tự giải phóng job hết Retention.
+fn init(paths: &Paths) -> zc_core::Result<Startup> {
+    // Bản tạm của lần trước (file đang mở trong ứng dụng khác thì để lần sau)
+    let _ = std::fs::remove_dir_all(&paths.open);
     let db = db::open_db(&paths.db)?;
-    if db::list_roots(&db)?.is_empty()
-        && let Some(app_data) = std::env::var_os("APPDATA")
-    {
+    let known: Vec<String> = db::list_roots(&db)?.into_iter().map(|r| r.path.to_lowercase()).collect();
+    let first_run = known.is_empty();
+    let mut new_accounts = Vec::new();
+    if let Some(app_data) = std::env::var_os("APPDATA") {
         for store in layout::detect_media_stores(Path::new(&app_data)) {
-            db::add_root(&db, &store, None)?;
+            let root = db::add_root(&db, &store, None)?;
+            if !first_run && !known.contains(&root.path.to_lowercase()) {
+                log::info!("Phát hiện tài khoản Zalo mới");
+                new_accounts.extend(layout::account_uid(&store));
+            }
         }
     }
     let purged = quarantine::purge_expired(&db, db::now_ms())?;
@@ -489,10 +533,11 @@ fn init(paths: &Paths) -> zc_core::Result<Vec<JobResult>> {
             r.bytes
         );
     }
-    Ok(purged)
+    Ok(Startup { purged, new_accounts })
 }
 
-fn thumb_response(state: &AppState, uri_path: &str) -> Response<Vec<u8>> {
+/// `thumb://<id>` → ảnh nhỏ cho bảng; `media://<id>` → ảnh lớn để xem.
+fn image_response(state: &AppState, uri_path: &str, large: bool) -> Response<Vec<u8>> {
     let not_found = || {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
@@ -503,9 +548,12 @@ fn thumb_response(state: &AppState, uri_path: &str) -> Response<Vec<u8>> {
         return not_found();
     };
     let found = state.db().ok().and_then(|db| {
-        thumbs::render_thumbnail(&db, item_id, &state.paths.thumbs)
-            .ok()
-            .flatten()
+        let render = if large {
+            thumbs::render_view
+        } else {
+            thumbs::render_thumbnail
+        };
+        render(&db, item_id, &state.paths.thumbs).ok().flatten()
     });
     let Some(src) = found else { return not_found() };
     match std::fs::read(&src.file) {
@@ -526,6 +574,7 @@ pub fn run() {
         rt: Mutex::new(Runtime::default()),
     });
     let thumb_state = state.clone();
+    let media_state = state.clone();
 
     tauri::Builder::default()
         // Mở app lần hai → đưa cửa sổ đang có lên trước
@@ -551,12 +600,23 @@ pub fn run() {
             let s = thumb_state.clone();
             let path = request.uri().path().to_owned();
             tauri::async_runtime::spawn_blocking(move || {
-                responder.respond(thumb_response(&s, &path))
+                responder.respond(image_response(&s, &path, false))
+            });
+        })
+        .register_asynchronous_uri_scheme_protocol("media", move |_ctx, request, responder| {
+            let s = media_state.clone();
+            let path = request.uri().path().to_owned();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(image_response(&s, &path, true))
             });
         })
         .setup(move |app| {
             match init(&state.paths) {
-                Ok(purged) => state.rt.lock().unwrap().auto_purged = purged,
+                Ok(st) => {
+                    let mut rt = state.rt.lock().unwrap();
+                    rt.auto_purged = st.purged;
+                    rt.new_accounts = st.new_accounts;
+                }
                 Err(e) => log::error!("Khởi tạo thất bại: {e}"),
             }
             app.manage(state);
@@ -565,6 +625,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             health,
             take_auto_purged,
+            take_new_accounts,
+            accounts,
             roots,
             add_root,
             start_scan,
@@ -580,6 +642,7 @@ pub fn run() {
             purge,
             export_report,
             export_log,
+            open_item,
         ])
         .run(tauri::generate_context!())
         .expect("không khởi động được Zola Cleaner");

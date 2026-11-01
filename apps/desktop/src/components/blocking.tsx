@@ -1,5 +1,5 @@
 /**
- * Thao tác dài (quét, cách ly, khôi phục, giải phóng) hiện hộp thoại chặn mọi thao tác khác:
+ * Thao tác dài (quét, chuyển vào thùng rác, khôi phục, dọn sạch) hiện hộp thoại chặn mọi thao tác khác:
  * người dùng biết app đang làm việc và chỉ cần chờ.
  */
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
