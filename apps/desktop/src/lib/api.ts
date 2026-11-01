@@ -165,6 +165,21 @@ export interface Job {
   archivePath: string | null;
 }
 
+export interface TrashSetting {
+  rootId: number;
+  dir: string;
+  isDefault: boolean;
+  /** Cùng ổ với dữ liệu Zalo → chuyển vào thùng rác tức thì; khác ổ → phải chép. */
+  sameDrive: boolean;
+  free: number | null;
+}
+
+export interface AppSettings {
+  trash: TrashSetting[];
+  backupDir: string;
+  backupIsDefault: boolean;
+}
+
 export interface DiskInfo {
   /** Ổ chứa dữ liệu Zalo, ví dụ "C:". */
   drive: string;
@@ -232,6 +247,10 @@ export const api = {
   /** Mở bằng ứng dụng mặc định của Windows (qua một bản tạm, tài liệu fileNoise được giải mã). */
   openItem: (itemId: number) => call<void>("open_item", { itemId }),
   diskSpace: (rootId: number) => call<DiskInfo>("disk_space", { rootId }),
+  settings: () => call<AppSettings>("settings"),
+  setTrashDir: (rootId: number, path: string | null) => call<void>("set_trash_dir", { rootId, path }),
+  setBackupDir: (path: string | null) => call<void>("set_backup_dir", { path }),
+  backupDir: () => call<string>("backup_dir"),
   exportBackup: (jobIds: number[], path: string) => call<ArchiveResult>("export_backup", { jobIds, path }),
   importBackup: (rootId: number, path: string) => call<ArchiveResult>("import_backup", { rootId, path }),
 };

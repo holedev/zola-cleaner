@@ -88,6 +88,12 @@ CREATE TABLE IF NOT EXISTS jobs (
   quarantine_dir  TEXT NOT NULL
 );
 
+-- Cấu hình của người dùng (vd. backup_dir)
+CREATE TABLE IF NOT EXISTS settings (
+  key    TEXT PRIMARY KEY,
+  value  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS job_items (
   job_id           INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
   item_id          INTEGER NOT NULL REFERENCES items(id),
@@ -126,6 +132,7 @@ pub fn open_db(file: &Path) -> Result<Db> {
     db.execute_batch(SCHEMA)?;
     // Cột thêm sau, không đổi SCHEMA_VERSION (đổi version sẽ xoá bảng jobs — mất thùng rác của người dùng)
     add_column_if_missing(&db, "jobs", "archive_path", "TEXT")?;
+    add_column_if_missing(&db, "roots", "trash_dir", "TEXT")?;
     db.execute_batch(&format!("PRAGMA user_version = {SCHEMA_VERSION}"))?;
     Ok(db)
 }
@@ -233,6 +240,46 @@ pub fn set_root_path(db: &Db, id: i64, dir: &Path) -> Result<Root> {
     }
     db.execute("UPDATE roots SET path = ? WHERE id = ?", params![path, id])?;
     get_root(db, id)?.ok_or_else(|| crate::Error::Msg("Không tìm thấy tài khoản".into()))
+}
+
+/// Thùng rác người dùng tự chọn cho tài khoản (None = mặc định).
+pub fn root_trash_dir(db: &Db, id: i64) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT trash_dir FROM roots WHERE id = ?", [id], |r| {
+            r.get(0)
+        })
+        .optional()?
+        .flatten())
+}
+
+pub fn set_root_trash_dir(db: &Db, id: i64, dir: Option<&Path>) -> Result<()> {
+    let dir = dir.map(|d| d.to_string_lossy().into_owned());
+    db.execute(
+        "UPDATE roots SET trash_dir = ? WHERE id = ?",
+        params![dir, id],
+    )?;
+    Ok(())
+}
+
+pub fn get_setting(db: &Db, key: &str) -> Result<Option<String>> {
+    Ok(db
+        .query_row("SELECT value FROM settings WHERE key = ?", [key], |r| {
+            r.get(0)
+        })
+        .optional()?
+        .flatten())
+}
+
+/// Đặt (hoặc xoá, nếu None / rỗng) một cấu hình.
+pub fn set_setting(db: &Db, key: &str, value: Option<&str>) -> Result<()> {
+    match value.map(str::trim).filter(|v| !v.is_empty()) {
+        Some(v) => db.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![key, v],
+        )?,
+        None => db.execute("DELETE FROM settings WHERE key = ?", [key])?,
+    };
+    Ok(())
 }
 
 /// Tên dễ nhớ do người dùng đặt cho tài khoản (Media Store). Rỗng → bỏ tên.

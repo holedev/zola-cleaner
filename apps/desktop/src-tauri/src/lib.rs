@@ -88,14 +88,26 @@ impl AppState {
     fn job_options(&self) -> JobOptions {
         JobOptions::new(self.paths.quarantine.clone())
     }
-    /// Thùng rác cùng ổ với Media Store (dữ liệu Zalo có thể đã được chuyển sang ổ khác).
-    fn job_options_for(&self, db: &db::Db, root_id: i64) -> CmdResult<JobOptions> {
+    /// Thùng rác của một tài khoản: người dùng tự chọn, hoặc mặc định cùng ổ với dữ liệu Zalo.
+    fn trash_dir_for(&self, db: &db::Db, root_id: i64) -> CmdResult<PathBuf> {
         let root = db::get_root(db, root_id)?
             .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
-        Ok(JobOptions::new(quarantine::quarantine_base_for(
+        let custom = db::root_trash_dir(db, root_id)?.map(PathBuf::from);
+        Ok(quarantine::quarantine_base_for(
             Path::new(&root.path),
             &self.paths.quarantine,
-        )))
+            custom.as_deref(),
+        ))
+    }
+    fn job_options_for(&self, db: &db::Db, root_id: i64) -> CmdResult<JobOptions> {
+        Ok(JobOptions::new(self.trash_dir_for(db, root_id)?))
+    }
+    /// Thư mục lưu bản sao lưu ZIP: người dùng tự chọn, hoặc Documents\Zola Cleaner.
+    fn backup_dir(&self, db: &db::Db) -> CmdResult<(PathBuf, bool)> {
+        Ok(match db::get_setting(db, BACKUP_DIR_KEY)? {
+            Some(d) => (PathBuf::from(d), false),
+            None => (default_backup_dir(), true),
+        })
     }
 }
 
@@ -528,6 +540,121 @@ async fn purge(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
     .await
 }
 
+// --- Cài đặt: nơi lưu thùng rác và bản sao lưu ---
+
+const BACKUP_DIR_KEY: &str = "backup_dir";
+
+fn default_backup_dir() -> PathBuf {
+    let home = std::env::var_os("USERPROFILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    home.join("Documents").join("Zola Cleaner")
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TrashSetting {
+    root_id: i64,
+    dir: String,
+    is_default: bool,
+    /// Cùng ổ với dữ liệu Zalo → tức thì; khác ổ → chép.
+    same_drive: bool,
+    /// Dung lượng còn trống ở ổ chứa thùng rác (None nếu không đọc được).
+    free: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Settings {
+    trash: Vec<TrashSetting>,
+    backup_dir: String,
+    backup_is_default: bool,
+}
+
+#[tauri::command]
+async fn settings(state: AppStateRef<'_>) -> CmdResult<Settings> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let db = s.db()?;
+        let mut trash = Vec::new();
+        for root in db::list_roots(&db)? {
+            let dir = s.trash_dir_for(&db, root.id)?;
+            let same_drive =
+                quarantine::drive_of(&dir) == quarantine::drive_of(Path::new(&root.path));
+            // Ổ của thùng rác: đọc dung lượng ở thư mục tồn tại gần nhất
+            let free = dir
+                .ancestors()
+                .find(|a| a.is_dir())
+                .and_then(|a| fsx::disk_space(a).ok())
+                .map(|(f, _)| f);
+            trash.push(TrashSetting {
+                root_id: root.id,
+                dir: dir.to_string_lossy().into_owned(),
+                is_default: db::root_trash_dir(&db, root.id)?.is_none(),
+                same_drive,
+                free,
+            });
+        }
+        let (backup, backup_is_default) = s.backup_dir(&db)?;
+        Ok(Settings {
+            trash,
+            backup_dir: backup.to_string_lossy().into_owned(),
+            backup_is_default,
+        })
+    })
+    .await
+}
+
+/// Đổi thùng rác của một tài khoản (null = mặc định). Chỉ áp dụng cho lần dọn sau.
+#[tauri::command]
+async fn set_trash_dir(
+    state: AppStateRef<'_>,
+    root_id: i64,
+    path: Option<String>,
+) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let db = s.db()?;
+        let root = db::get_root(&db, root_id)?
+            .ok_or_else(|| CmdError::new("user", "Không tìm thấy tài khoản"))?;
+        let dir = path.filter(|p| !p.trim().is_empty()).map(PathBuf::from);
+        if let Some(d) = &dir {
+            quarantine::check_trash_dir(Path::new(&root.path), d)?;
+        }
+        db::set_root_trash_dir(&db, root_id, dir.as_deref())?;
+        Ok(())
+    })
+    .await
+}
+
+/// Đổi thư mục mặc định lưu bản sao lưu ZIP (null = Documents\Zola Cleaner).
+#[tauri::command]
+async fn set_backup_dir(state: AppStateRef<'_>, path: Option<String>) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let db = s.db()?;
+        if let Some(p) = path.as_deref().filter(|p| !p.trim().is_empty()) {
+            std::fs::create_dir_all(p)
+                .map_err(|e| CmdError::new("user", format!("Không tạo được thư mục: {e}")))?;
+        }
+        db::set_setting(&db, BACKUP_DIR_KEY, path.as_deref())?;
+        Ok(())
+    })
+    .await
+}
+
+/// Thư mục lưu ZIP đang dùng (tạo sẵn để hộp thoại lưu file mở đúng chỗ).
+#[tauri::command]
+async fn backup_dir(state: AppStateRef<'_>) -> CmdResult<String> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let (dir, _) = s.backup_dir(&s.db()?)?;
+        let _ = std::fs::create_dir_all(&dir);
+        Ok(dir.to_string_lossy().into_owned())
+    })
+    .await
+}
+
 // --- Ổ đĩa, sao lưu ---
 
 #[derive(Serialize)]
@@ -862,6 +989,10 @@ pub fn run() {
             accounts,
             set_root_label,
             set_root_path,
+            settings,
+            set_trash_dir,
+            set_backup_dir,
+            backup_dir,
             roots,
             add_root,
             start_scan,

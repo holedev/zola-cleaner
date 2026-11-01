@@ -817,9 +817,9 @@ fn thung_rac_cung_o_voi_du_lieu_zalo() {
     let default = Path::new(r"C:\Users\an\AppData\Roaming\zola-cleaner\quarantine");
     let on_c = Path::new(r"C:\Users\an\AppData\Roaming\ZaloData\media\1\ZaloDownloads");
     let on_d = Path::new(r"D:\Zalo Data\media\1\ZaloDownloads");
-    assert_eq!(quarantine_base_for(on_c, default), default);
+    assert_eq!(quarantine_base_for(on_c, default, None), default);
     assert_eq!(
-        quarantine_base_for(on_d, default),
+        quarantine_base_for(on_d, default, None),
         Path::new(r"D:\ZolaCleaner\trash")
     );
 }
@@ -880,4 +880,68 @@ fn doi_duong_dan_tai_khoan_giu_nguyen_ten_va_alias() {
             .as_deref(),
         Some("Gia đình")
     );
+}
+
+#[test]
+fn thung_rac_tu_chon_va_kiem_tra() {
+    use zc_core::db::{get_setting, set_setting};
+    use zc_core::quarantine::check_trash_dir;
+    let s = setup();
+    let own = s.store.parent().unwrap().join("Thùng rác của tôi");
+    assert!(check_trash_dir(&s.store, &own).unwrap().same_drive);
+    // Không cho đặt trong Media Store
+    assert!(check_trash_dir(&s.store, &s.store.join("trash")).is_err());
+
+    let opts = JobOptions {
+        check_zalo: false,
+        ..JobOptions::new(own.clone())
+    };
+    let q = quarantine(&s.db, &s.filter(&["111"]), &opts).unwrap();
+    assert_eq!(q.bytes, 100);
+    assert!(fs::read_dir(&own).unwrap().next().is_some());
+    restore_job(&s.db, q.job_id, &opts).unwrap();
+    assert_eq!(nlink(&s.a), 2);
+
+    set_setting(&s.db, "backup_dir", Some(r"D:\Sao lưu")).unwrap();
+    assert_eq!(
+        get_setting(&s.db, "backup_dir").unwrap().as_deref(),
+        Some(r"D:\Sao lưu")
+    );
+    set_setting(&s.db, "backup_dir", Some("  ")).unwrap();
+    assert_eq!(get_setting(&s.db, "backup_dir").unwrap(), None);
+}
+
+#[test]
+fn khong_dat_thung_rac_trong_thu_muc_zalo() {
+    use zc_core::quarantine::check_trash_dir;
+    let tmp = tempfile::tempdir().unwrap();
+    let store = tmp.path().join("ZaloData/media/1/ZaloDownloads");
+    fs::create_dir_all(&store).unwrap();
+    assert!(check_trash_dir(&store, &tmp.path().join("ZaloData/trash")).is_err());
+    assert!(check_trash_dir(&store, &tmp.path().join("ZolaCleaner/trash")).is_ok());
+}
+
+/// Thử thùng rác ở ổ khác thật (chép rồi xoá). Chỉ chạy khi đặt ZC_TEST_OTHER_DRIVE (vd. `D:\`), dùng dữ liệu giả.
+#[test]
+fn thung_rac_o_khac_that() {
+    let Some(other) = std::env::var_os("ZC_TEST_OTHER_DRIVE") else {
+        return;
+    };
+    let s = setup();
+    let trash = tempfile::tempdir_in(std::path::PathBuf::from(other)).unwrap();
+    let opts = JobOptions {
+        check_zalo: false,
+        ..JobOptions::new(trash.path().to_path_buf())
+    };
+    let a_bytes = fs::read(&s.a).unwrap();
+    let q = quarantine(&s.db, &s.filter(&["111"]), &opts).unwrap();
+    assert_eq!((q.moved, q.failed), (1, 0));
+    assert!(!s.a.exists() && !s.a_res.exists());
+    let r = restore_job(&s.db, q.job_id, &opts).unwrap();
+    assert_eq!((r.moved, r.failed), (1, 0));
+    assert_eq!(fs::read(&s.a).unwrap(), a_bytes);
+    assert_eq!(key(&s.a_res), key(&s.a));
+    let q2 = quarantine(&s.db, &s.filter(&["111"]), &opts).unwrap();
+    purge_job(&s.db, q2.job_id).unwrap();
+    assert!(!s.a.exists());
 }

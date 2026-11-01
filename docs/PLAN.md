@@ -55,7 +55,7 @@
 ## 3. Nguyên tắc an toàn (bất biến)
 
 1. **Mặc định là chạy thử.** Mọi thao tác dọn dẹp đều hiển thị trước: bao nhiêu file, bao nhiêu GB, ví dụ file.
-2. **Cách ly trước, xoá sau.** Cách ly một Media Item = `rename` một Link vào `%APPDATA%\zalo-cleaner\quarantine\<jobId>\` (cùng ổ với ZaloData, ngoài ZaloData) và gỡ các Link còn lại. Mọi Link được ghi vào nhật ký **trước**; Restore = rename ngược + tạo lại hardlink. Dung lượng chỉ giảm khi Purge (người dùng bấm, hoặc sau Retention 7 ngày).
+2. **Thùng rác trước, xoá sau.** Chuyển một Media Item vào thùng rác = chuyển một Link vào `<thùng rác>\<jobId>-<thời điểm>\` và gỡ các Link còn lại. Mọi Link được ghi vào nhật ký **trước**; Restore = chuyển ngược + tạo lại hardlink. Thùng rác mặc định cùng ổ với dữ liệu Zalo (`%APPDATA%\zola-cleaner\quarantine`, hoặc `<ổ>\ZolaCleaner\trash`) → đổi tên, tức thì, dung lượng chỉ giảm khi Purge. Người dùng chọn được thùng rác ở ổ khác (tab Cài đặt) → chép rồi xoá bản gốc: chậm hơn nhưng ổ chứa Zalo trống ngay. Không cho đặt thùng rác trong thư mục dữ liệu Zalo.
    - Không dùng Thùng rác Windows: Recycle Bin có giới hạn dung lượng, chậm, và không hiểu hardlink.
 3. **Allowlist theo thư mục kho.** Chỉ Link kho trong `picture\`, `video\`, `fileNoise\`, `file\` được dọn (kèm các Link `resource\` của cùng Media Item). Không bao giờ dọn `Cache\`, `richThumb\`, `fileThumb\`, `voice\`, `zinstant\`, `.rescache`, file `database`.
 4. **Kiểm tra Zalo đang chạy** (tìm tiến trình `Zalo.exe`) trước khi cách ly/khôi phục; chặn và hướng dẫn người dùng tự thoát Zalo.

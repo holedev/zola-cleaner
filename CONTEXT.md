@@ -67,7 +67,7 @@ _Avoid_: dry run
 **Quarantine Job**:
 Một lần dọn: các Media Item được chọn bị chuyển khỏi Media Store sang thùng rác của app, vẫn khôi phục được.
 Trên giao diện, tập hợp các Quarantine Job đang giữ file gọi là "Thùng rác" (của app — không phải Thùng rác Windows,
-vì khôi phục phải tạo lại mọi Link).
+vì khôi phục phải tạo lại mọi Link). Mặc định nằm cùng ổ với Media Store; người dùng có thể chọn chỗ khác, kể cả ổ khác.
 _Avoid_: delete job, cleanup, cách ly (khó hiểu với người dùng phổ thông)
 
 **Restore**:

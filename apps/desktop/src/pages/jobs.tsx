@@ -82,9 +82,12 @@ export function JobsPage({ rootId }: { rootId: number }) {
 
   const exportZip = async (list: Job[]) => {
     const day = new Date().toISOString().slice(0, 10);
+    // Mở sẵn ở thư mục sao lưu trong Cài đặt (mặc định Documents\Zola Cleaner)
+    const dir = await api.backupDir().catch(() => "");
+    const name = `zola-cleaner-sao-luu-${day}.zip`;
     const path = await save({
       title: "Lưu bản sao lưu (ZIP)",
-      defaultPath: `zola-cleaner-sao-luu-${day}.zip`,
+      defaultPath: dir ? `${dir}\\${name}` : name,
       filters: [{ name: "ZIP", extensions: ["zip"] }],
     });
     if (!path) return;

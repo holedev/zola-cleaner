@@ -27,9 +27,10 @@ import { keys, useHealth, useInvalidateIndex, useRoots } from "@/lib/queries";
 import { ConversationsPage } from "@/pages/conversations";
 import { JobsPage } from "@/pages/jobs";
 import { OverviewPage } from "@/pages/overview";
+import { SettingsPage } from "@/pages/settings";
 import { SuggestionsPage } from "@/pages/suggestions";
 
-type Tab = "suggestions" | "conversations" | "jobs" | "overview";
+type Tab = "suggestions" | "conversations" | "jobs" | "overview" | "settings";
 
 const PHASE: Record<ScanProgress["phase"], string> = {
   listing: "Đang liệt kê thư mục",
@@ -222,6 +223,7 @@ export default function App() {
           <TabsTrigger value="conversations">Theo hội thoại</TabsTrigger>
           <TabsTrigger value="jobs">Thùng rác</TabsTrigger>
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
+          <TabsTrigger value="settings">Cài đặt</TabsTrigger>
         </TabsList>
         <TabsContent value="suggestions" className="mt-4">
           <SuggestionsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} />
@@ -234,6 +236,9 @@ export default function App() {
         </TabsContent>
         <TabsContent value="overview" className="mt-4">
           <OverviewPage rootId={rootId} />
+        </TabsContent>
+        <TabsContent value="settings" className="mt-4">
+          <SettingsPage />
         </TabsContent>
       </Tabs>
 

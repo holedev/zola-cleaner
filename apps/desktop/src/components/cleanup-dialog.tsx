@@ -2,7 +2,7 @@
  * Xem trước từng file → bỏ tick file muốn giữ → chuyển vào thùng rác → hướng dẫn kiểm tra trong Zalo.
  * Dùng chung cho Gợi ý, Theo hội thoại và Theo tháng.
  */
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { CircleCheck, FileText, Film, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -69,6 +69,8 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
   const [group, setGroup] = useState<ItemGroup>("media");
   const [order, setOrder] = useState<ItemOrder>("largest");
   const zaloRunning = !!health.data?.zaloRunning;
+  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings, enabled: request != null });
+  const trash = settings.data?.trash.find((t) => t.rootId === request?.filter.rootId);
 
   // Mở yêu cầu mới → tick lại tất cả
   useEffect(() => {
@@ -89,7 +91,11 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
     if (!filter) return;
     onClose();
     try {
-      const r = await blocking.run("Đang chuyển vào thùng rác…", () => api.quarantine(filter), "Đừng mở Zalo lúc này.");
+      const detail =
+        trash && !trash.sameDrive
+          ? `Thùng rác ở ổ khác (${trash.dir.slice(0, 3)}): đang chép file sang, có thể mất vài phút. Đừng mở Zalo lúc này.`
+          : "Đừng mở Zalo lúc này.";
+      const r = await blocking.run("Đang chuyển vào thùng rác…", () => api.quarantine(filter), detail);
       await invalidate();
       if (r.moved === 0 && r.failed > 0) toast.error(`Không chuyển được ${r.failed} file (có thể đang bị khoá).`);
       else setDone(r);

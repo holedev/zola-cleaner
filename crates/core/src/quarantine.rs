@@ -15,6 +15,7 @@ use crate::db::{Db, get_root, now_ms, tx};
 use crate::error::{Error, Result};
 use crate::filter::{CleanupFilter, DAY_MS, DISPLAY_PATH, ITEM_TS};
 use crate::fsx;
+use crate::layout::MOVED_DATA_DIR;
 use crate::safety::is_zalo_running;
 use crate::stats::Bucket;
 
@@ -106,15 +107,86 @@ pub fn default_quarantine_base(app_data: &Path) -> PathBuf {
     app_data.join("zola-cleaner").join("quarantine")
 }
 
-/// Thư mục thùng rác cho một Media Store: phải cùng ổ (dọn = đổi tên file, không chép).
-/// Cùng ổ với `default_base` (thường là ổ C, %APPDATA%) → dùng `default_base`;
-/// dữ liệu Zalo đã chuyển sang ổ khác → `<ổ đó>\ZolaCleaner\trash`.
-pub fn quarantine_base_for(store: &Path, default_base: &Path) -> PathBuf {
+/// Thư mục thùng rác cho một Media Store. Người dùng tự chọn (`custom`) thì dùng chỗ đó.
+/// Mặc định cùng ổ với dữ liệu (dọn = đổi tên file, tức thì): cùng ổ với `default_base` (thường là ổ C, %APPDATA%)
+/// → `default_base`; dữ liệu Zalo đã chuyển sang ổ khác → `<ổ đó>\ZolaCleaner\trash`.
+pub fn quarantine_base_for(store: &Path, default_base: &Path, custom: Option<&Path>) -> PathBuf {
+    if let Some(dir) = custom {
+        return dir.to_path_buf();
+    }
     if drive_of(store) == drive_of(default_base) {
         return default_base.to_path_buf();
     }
     let drive_root: PathBuf = store.components().take(2).collect(); // "D:" + "\"
     drive_root.join("ZolaCleaner").join("trash")
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashInfo {
+    /// Cùng ổ với dữ liệu Zalo → chuyển vào thùng rác tức thì; khác ổ → phải chép.
+    pub same_drive: bool,
+}
+
+/// Kiểm tra một thư mục người dùng chọn làm thùng rác cho Media Store `store`.
+pub fn check_trash_dir(store: &Path, dir: &Path) -> Result<TrashInfo> {
+    if !dir.is_absolute() {
+        return Err(Error::Msg(
+            "Hãy chọn một thư mục đầy đủ (ví dụ D:\\Thùng rác Zalo)".into(),
+        ));
+    }
+    let lower = |p: &Path| p.to_string_lossy().to_lowercase();
+    let d = lower(dir);
+    // Không đặt trong thư mục dữ liệu của Zalo: Zalo có thể xoá cả thư mục đó khi chuyển ổ / dọn dữ liệu
+    let zalo_roots = store
+        .ancestors()
+        .filter(|a| {
+            a.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n == "ZaloData" || n == MOVED_DATA_DIR)
+        })
+        .chain(std::iter::once(store));
+    for z in zalo_roots {
+        let z = lower(z);
+        if d == z || d.starts_with(&format!("{z}\\")) || d.starts_with(&format!("{z}/")) {
+            return Err(Error::Msg(
+                "Không đặt thùng rác bên trong thư mục dữ liệu của Zalo".into(),
+            ));
+        }
+    }
+    fs::create_dir_all(dir).map_err(|e| Error::Msg(format!("Không tạo được thư mục: {e}")))?;
+    let probe = dir.join(".zola-cleaner-test");
+    fs::write(&probe, b"ok").map_err(|e| Error::Msg(format!("Không ghi được vào thư mục: {e}")))?;
+    let _ = fs::remove_file(&probe);
+    Ok(TrashInfo {
+        same_drive: drive_of(dir) == drive_of(store),
+    })
+}
+
+/// Lỗi "khác ổ đĩa" khi đổi tên (Windows: ERROR_NOT_SAME_DEVICE = 17; Unix: EXDEV = 18).
+fn is_cross_device(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::CrossesDevices
+        || matches!(e.raw_os_error(), Some(17) | Some(18))
+}
+
+/// Chuyển một file: đổi tên nếu cùng ổ (tức thì), khác ổ thì chép rồi mới xoá bản gốc.
+pub(crate) fn move_file(src: &Path, dst: &Path) -> std::io::Result<()> {
+    match fs::rename(src, dst) {
+        Err(e) if is_cross_device(&e) => copy_then_remove(src, dst),
+        r => r,
+    }
+}
+
+/// Chép `src` sang `dst` (qua file `.part`, đối chiếu kích thước) rồi xoá `src`. Lỗi giữa chừng → `src` còn nguyên.
+pub(crate) fn copy_then_remove(src: &Path, dst: &Path) -> std::io::Result<()> {
+    let part = dst.with_extension("zc-part");
+    let copied = fs::copy(src, &part)?;
+    if copied != fs::metadata(src)?.len() {
+        let _ = fs::remove_file(&part);
+        return Err(std::io::Error::other("chép file không đủ dung lượng"));
+    }
+    fs::rename(&part, dst)?;
+    fs::remove_file(src)
 }
 
 pub(crate) fn abs_of(root: &Path, rel_path: &str) -> PathBuf {
@@ -212,7 +284,7 @@ pub fn preview_cleanup(
 }
 
 /// Ổ đĩa của một đường dẫn (`c:\`), để kiểm tra rename không phải chép qua ổ khác.
-pub(crate) fn drive_of(p: &Path) -> String {
+pub fn drive_of(p: &Path) -> String {
     p.components()
         .next()
         .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
@@ -250,7 +322,7 @@ pub(crate) fn restore_links(
         if let Some(dir) = primary.parent() {
             fs::create_dir_all(dir)?;
         }
-        fs::rename(quarantine_path, &primary)?;
+        move_file(quarantine_path, &primary)?;
     }
     if !primary.exists() {
         return Err(Error::Msg(format!(
@@ -294,14 +366,6 @@ pub fn quarantine(db: &Db, filter: &CleanupFilter, opts: &JobOptions) -> Result<
     let root = get_root(db, filter.root_id)?
         .ok_or_else(|| Error::Msg(format!("Không tìm thấy root #{}", filter.root_id)))?;
     let root_path = PathBuf::from(&root.path);
-    let base = std::path::absolute(&opts.quarantine_base)?;
-    if drive_of(&base) != drive_of(&root_path) {
-        return Err(Error::Msg(format!(
-            "Thư mục cách ly ({}) phải cùng ổ đĩa với {}",
-            base.display(),
-            root_path.display()
-        )));
-    }
 
     let w = filter.candidate_where();
     let s = filter.shared_cond();
@@ -314,6 +378,23 @@ pub fn quarantine(db: &Db, filter: &CleanupFilter, opts: &JobOptions) -> Result<
         q.query_map(params_from_iter(params), |r| Ok((r.get(0)?, r.get(1)?)))?
             .collect::<rusqlite::Result<_>>()?
     };
+
+    let base = std::path::absolute(&opts.quarantine_base)?;
+    // Thùng rác ở ổ khác → phải chép: ổ đích cần đủ chỗ trước khi đụng vào file nào
+    if drive_of(&base) != drive_of(&root_path) {
+        let need: u64 = items.iter().map(|&(_, size)| size as u64).sum();
+        fs::create_dir_all(&base)?;
+        if let Ok((free, _)) = crate::fsx::disk_space(&base)
+            && free < need.saturating_add(need / 50 + 16 * 1024 * 1024)
+        {
+            return Err(Error::Msg(format!(
+                "Ổ chứa thùng rác ({}) không đủ chỗ: cần khoảng {}, còn trống {}",
+                base.display(),
+                crate::format_bytes(need),
+                crate::format_bytes(free)
+            )));
+        }
+    }
 
     let now = now_ms();
     db.execute(
@@ -443,7 +524,7 @@ fn move_out(root: &Path, p: &Planned) -> Result<()> {
     if let Some(dir) = p.quarantine_path.parent() {
         fs::create_dir_all(dir)?;
     }
-    fs::rename(&primary, &p.quarantine_path)?;
+    move_file(&primary, &p.quarantine_path)?;
     for other in paths {
         match fs::remove_file(&other) {
             Ok(()) => {}
@@ -731,4 +812,23 @@ pub fn cleanup_items(
         })?
         .collect::<rusqlite::Result<_>>()?;
     Ok(CleanupItems { total, items })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::copy_then_remove;
+    use std::fs;
+
+    #[test]
+    fn chep_roi_xoa_khi_khac_o() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("a.jpg");
+        let dst = dir.path().join("trash").join("a.jpg");
+        fs::create_dir_all(dst.parent().unwrap()).unwrap();
+        fs::write(&src, vec![7u8; 4096]).unwrap();
+        copy_then_remove(&src, &dst).unwrap();
+        assert!(!src.exists());
+        assert_eq!(fs::read(&dst).unwrap(), vec![7u8; 4096]);
+        assert!(!dst.with_extension("zc-part").exists());
+    }
 }
