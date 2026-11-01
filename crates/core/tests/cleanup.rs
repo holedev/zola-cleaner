@@ -823,3 +823,61 @@ fn thung_rac_cung_o_voi_du_lieu_zalo() {
         Path::new(r"D:\ZolaCleaner\trash")
     );
 }
+
+#[test]
+fn chon_thu_muc_nao_trong_cay_zalo_cung_tim_ra_media_store() {
+    use zc_core::layout::resolve_stores;
+    let tmp = tempfile::tempdir().unwrap();
+    let zd = tmp.path().join("Zalo Data");
+    let store = zd.join("media/123/ZaloDownloads");
+    fs::create_dir_all(&store).unwrap();
+    for picked in [
+        store.clone(),
+        zd.join("media/123"),
+        zd.join("media"),
+        zd.clone(),
+        tmp.path().to_path_buf(),
+    ] {
+        assert_eq!(
+            resolve_stores(&picked),
+            vec![store.clone()],
+            "{}",
+            picked.display()
+        );
+    }
+    assert!(resolve_stores(&tmp.path().join("khong-co")).is_empty());
+}
+
+#[test]
+fn doi_duong_dan_tai_khoan_giu_nguyen_ten_va_alias() {
+    use zc_core::db::{get_root, set_root_label, set_root_path};
+    let s = setup();
+    set_root_label(&s.db, s.root_id, Some("Zalo nhà")).unwrap();
+    set_alias(&s.db, s.root_id, "111", Some("Gia đình")).unwrap();
+    // Người dùng tự di chuyển thư mục
+    let moved = s
+        .store
+        .parent()
+        .unwrap()
+        .join("moved")
+        .join("ZaloDownloads");
+    fs::create_dir_all(moved.parent().unwrap()).unwrap();
+    fs::rename(&s.store, &moved).unwrap();
+    set_root_path(&s.db, s.root_id, &moved).unwrap();
+    let root = get_root(&s.db, s.root_id).unwrap().unwrap();
+    assert_eq!(
+        (root.path.as_str(), root.label.as_deref()),
+        (moved.to_string_lossy().as_ref(), Some("Zalo nhà"))
+    );
+    let p = scan(&s.db, s.root_id, &ScanOptions::default()).unwrap();
+    assert_eq!(p.bytes, 1560); // cùng ổ → file id giữ nguyên, quét lại khớp
+    let c = list_conversations(&s.db, &s.filter(&[]), 8).unwrap();
+    assert_eq!(
+        c.iter()
+            .find(|c| c.conv_id == "111")
+            .unwrap()
+            .alias
+            .as_deref(),
+        Some("Gia đình")
+    );
+}

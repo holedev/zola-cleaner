@@ -209,6 +209,7 @@ export const api = {
   roots: () => call<RootInfo[]>("roots"),
   addRoot: (path: string) => call<RootInfo>("add_root", { path }),
   setRootLabel: (rootId: number, label: string | null) => call<void>("set_root_label", { rootId, label }),
+  setRootPath: (rootId: number, path: string) => call<RootInfo>("set_root_path", { rootId, path }),
   startScan: (rootId: number) => call<void>("start_scan", { rootId }),
   stats: (rootId: number) => call<Stats>("stats", { rootId }),
   suggestions: (rootId: number) => call<Suggestion[]>("suggestions", { rootId }),

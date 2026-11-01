@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, FileDown, FolderPlus, FolderX, ScrollText, TriangleAlert } from "lucide-react";
+import { CircleCheck, FileDown, FolderInput, FolderPlus, FolderX, ScrollText, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { api, AREA_LABEL, type Bucket, CATEGORY_LABEL, errorMessage, formatBytes, type RootInfo, shortUid } from "@/lib/api";
+import { accountName, api, AREA_LABEL, type Bucket, CATEGORY_LABEL, errorMessage, formatBytes, type RootInfo, shortUid } from "@/lib/api";
 import { keys, useRoots, useStats } from "@/lib/queries";
 
 export function OverviewPage({ rootId }: { rootId: number }) {
@@ -23,11 +23,25 @@ export function OverviewPage({ rootId }: { rootId: number }) {
   const blocking = useBlocking();
 
   const addRoot = async () => {
-    const dir = await open({ directory: true, title: "Chọn thư mục ZaloDownloads" });
+    const dir = await open({ directory: true, title: "Chọn thư mục dữ liệu Zalo (ZaloData, \"Zalo Data\", media hoặc ZaloDownloads)" });
     if (typeof dir !== "string") return;
     try {
       await api.addRoot(dir);
       await qc.invalidateQueries({ queryKey: keys.roots });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  /** Người dùng tự di chuyển thư mục dữ liệu Zalo → chọn lại vị trí mới cho tài khoản. */
+  const changePath = async (r: RootInfo) => {
+    const dir = await open({ directory: true, title: `Chọn vị trí mới cho ${accountName(r)} (ZaloData, "Zalo Data", media hoặc ZaloDownloads)` });
+    if (typeof dir !== "string") return;
+    try {
+      const updated = await api.setRootPath(r.id, dir);
+      await qc.invalidateQueries({ queryKey: keys.roots });
+      toast.success(`Đã đổi đường dẫn của ${accountName(updated)}. Đang quét lại…`);
+      await api.startScan(r.id);
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -98,6 +112,14 @@ export function OverviewPage({ rootId }: { rootId: number }) {
                   <div className="text-muted-foreground text-xs">{r.layout.reasons.join(" · ")}</div>
                 )}
               </div>
+              <Button
+                variant={r.exists ? "ghost" : "default"}
+                size="sm"
+                onClick={() => changePath(r)}
+                title="Bạn đã tự di chuyển thư mục dữ liệu Zalo? Chọn lại vị trí mới — giữ nguyên tên, tên hội thoại và thùng rác"
+              >
+                <FolderInput /> {r.exists ? "Đổi đường dẫn…" : "Chọn vị trí mới…"}
+              </Button>
               <Button variant="outline" size="sm" disabled={!r.exists} onClick={() => exportReport(r)}>
                 <FileDown /> Xuất báo cáo cấu trúc
               </Button>
@@ -112,12 +134,17 @@ export function OverviewPage({ rootId }: { rootId: number }) {
           ))}
           <div className="flex gap-2">
             <Button variant="outline" onClick={addRoot}>
-              <FolderPlus /> Thêm thư mục…
+              <FolderPlus /> Thêm thư mục dữ liệu Zalo…
             </Button>
             <Button variant="ghost" onClick={exportLog}>
               <ScrollText /> Xuất nhật ký
             </Button>
           </div>
+          <p className="text-muted-foreground text-xs">
+            App tự tìm dữ liệu Zalo ở vị trí mặc định và ở mọi ổ đĩa (khi bạn đổi "Vị trí lưu trữ" trong Zalo). Nếu bạn tự di chuyển
+            thư mục bằng tay, bấm <b>Đổi đường dẫn…</b> ở tài khoản tương ứng, hoặc <b>Thêm thư mục dữ liệu Zalo…</b> cho tài khoản
+            chưa có trong danh sách.
+          </p>
           <p className="text-muted-foreground text-xs">
             App không gửi dữ liệu nào ra ngoài. Báo cáo và nhật ký chỉ được lưu vào file bạn chọn; hãy gửi chúng cho nhà phát triển
             khi app báo "Chỉ xem" hoặc gặp lỗi.

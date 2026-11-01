@@ -160,6 +160,24 @@ pub fn detect_accounts_in(app_data: &Path, media_dirs: &[PathBuf]) -> Vec<Accoun
         .collect()
 }
 
+/// Người dùng chọn một thư mục bất kỳ trong cây dữ liệu Zalo (`ZaloDownloads`, `<uid>`, `media`, `Zalo Data`, `ZaloData`)
+/// → các Media Store tìm thấy bên trong.
+pub fn resolve_stores(picked: &Path) -> Vec<PathBuf> {
+    if picked.file_name().and_then(|n| n.to_str()) == Some("ZaloDownloads") && picked.is_dir() {
+        return vec![picked.to_path_buf()];
+    }
+    let candidates = [
+        picked.join("ZaloDownloads"),              // chọn thư mục <uid>
+        picked.to_path_buf(),                      // chọn thư mục media
+        picked.join("media"),                      // chọn ZaloData / Zalo Data
+        picked.join(MOVED_DATA_DIR).join("media"), // chọn gốc ổ đĩa
+    ];
+    if candidates[0].is_dir() {
+        return vec![candidates[0].clone()];
+    }
+    detect_media_stores_in(&candidates[1..])
+}
+
 /// uid của Account sở hữu Media Store (`media\<uid>\ZaloDownloads`), nếu đúng cấu trúc.
 pub fn account_uid(store: &Path) -> Option<String> {
     let uid = store.parent()?.file_name()?.to_str()?;

@@ -213,6 +213,28 @@ pub fn add_root(db: &Db, dir: &Path, label: Option<&str>) -> Result<Root> {
     )?)
 }
 
+/// Đổi đường dẫn của một Media Store (người dùng tự di chuyển thư mục dữ liệu Zalo).
+/// Giữ nguyên id → tên tài khoản, Alias, thùng rác vẫn còn; nên quét lại sau đó.
+pub fn set_root_path(db: &Db, id: i64, dir: &Path) -> Result<Root> {
+    let abs = std::path::absolute(dir)?;
+    if !abs.is_dir() {
+        bail!("Không phải thư mục: {}", abs.display());
+    }
+    let path = abs.to_string_lossy().into_owned();
+    let taken: Option<i64> = db
+        .query_row(
+            "SELECT id FROM roots WHERE path = ? AND id != ?",
+            params![path, id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if taken.is_some() {
+        bail!("Thư mục này đã thuộc một tài khoản khác trong danh sách");
+    }
+    db.execute("UPDATE roots SET path = ? WHERE id = ?", params![path, id])?;
+    get_root(db, id)?.ok_or_else(|| crate::Error::Msg("Không tìm thấy tài khoản".into()))
+}
+
 /// Tên dễ nhớ do người dùng đặt cho tài khoản (Media Store). Rỗng → bỏ tên.
 pub fn set_root_label(db: &Db, id: i64, label: Option<&str>) -> Result<()> {
     let label = label.map(str::trim).filter(|l| !l.is_empty());

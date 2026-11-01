@@ -234,7 +234,73 @@ async fn set_root_label(
 #[tauri::command]
 async fn add_root(state: AppStateRef<'_>, path: String) -> CmdResult<RootInfo> {
     let s = state.inner().clone();
-    blocking(move || Ok(root_info(db::add_root(&s.db()?, Path::new(&path), None)?))).await
+    blocking(move || {
+        let db = s.db()?;
+        // Chọn thư mục nào trong cây dữ liệu Zalo cũng được → thêm mọi Media Store tìm thấy bên trong
+        let stores = layout::resolve_stores(Path::new(&path));
+        if stores.is_empty() {
+            return Err(CmdError::new("user", NOT_FOUND_STORE));
+        }
+        let mut first = None;
+        for store in &stores {
+            let root = db::add_root(&db, store, None)?;
+            first.get_or_insert(root);
+        }
+        Ok(root_info(first.expect("đã kiểm tra không rỗng")))
+    })
+    .await
+}
+
+const NOT_FOUND_STORE: &str = "Không tìm thấy thư mục ZaloDownloads trong thư mục đã chọn. Hãy chọn thư mục ZaloData, \"Zalo Data\", media hoặc ZaloDownloads.";
+
+/// Người dùng tự di chuyển thư mục dữ liệu Zalo → chọn lại vị trí mới cho tài khoản này (giữ tên, Alias, thùng rác).
+#[tauri::command]
+async fn set_root_path(state: AppStateRef<'_>, root_id: i64, path: String) -> CmdResult<RootInfo> {
+    if state.rt.lock().unwrap().scanning.contains_key(&root_id) {
+        return Err(CmdError::new("busy", "Đang quét, vui lòng chờ quét xong"));
+    }
+    exclusive(state.inner(), move |s| {
+        let db = s.db()?;
+        let old = db::get_root(&db, root_id)?
+            .ok_or_else(|| CmdError::new("user", "Không tìm thấy tài khoản"))?;
+        let uid = layout::account_uid(Path::new(&old.path));
+        let stores = layout::resolve_stores(Path::new(&path));
+        if stores.is_empty() {
+            return Err(CmdError::new("user", NOT_FOUND_STORE));
+        }
+        // Chỉ nhận thư mục của đúng tài khoản này (cùng uid) — tránh gán nhầm dữ liệu của tài khoản khác
+        let store = match &uid {
+            Some(uid) => stores
+                .iter()
+                .find(|st| layout::account_uid(st).as_ref() == Some(uid))
+                .ok_or_else(|| {
+                    let found: Vec<String> = stores
+                        .iter()
+                        .filter_map(|st| layout::account_uid(st))
+                        .map(|u| format!("…{}", &u[u.len().saturating_sub(4)..]))
+                        .collect();
+                    CmdError::new(
+                        "user",
+                        format!(
+                            "Thư mục đã chọn thuộc tài khoản khác ({}), không phải tài khoản …{}.",
+                            found.join(", "),
+                            &uid[uid.len().saturating_sub(4)..]
+                        ),
+                    )
+                })?,
+            None if stores.len() == 1 => &stores[0],
+            None => {
+                return Err(CmdError::new(
+                    "user",
+                    "Thư mục có nhiều tài khoản — hãy chọn đúng thư mục ZaloDownloads",
+                ));
+            }
+        };
+        let root = db::set_root_path(&db, root_id, store)?;
+        log::info!("Đổi đường dẫn tài khoản #{root_id}");
+        Ok(root_info(root))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -795,6 +861,7 @@ pub fn run() {
             take_new_accounts,
             accounts,
             set_root_label,
+            set_root_path,
             roots,
             add_root,
             start_scan,
