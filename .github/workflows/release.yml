@@ -1,19 +1,63 @@
 name: Release
 
-# Đẩy tag vX.Y.Z (khớp version trong apps/desktop/src-tauri/tauri.conf.json) để build file cài
-# và tạo bản nháp Release. Kiểm tra bản nháp rồi bấm Publish — app đã cài mới thấy bản cập nhật.
+# Tự phát hành sau mỗi lần CI trên main xanh. semantic-release đọc Conventional Commits từ tag trước:
+# feat → tăng minor, fix/perf → tăng patch, BREAKING CHANGE → tăng major; docs/ci/chore/refactor… → không phát hành.
+# Version lấy từ git tag và được ghi vào tauri.conf.json lúc build. Không commit version ngược lên main.
 on:
-  push:
-    tags: ["v*"]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release:
-    runs-on: windows-latest
+  version:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: release
+        name: Tag and create draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          before=$(git tag --points-at HEAD | grep '^v' || true)
+          npx --yes \
+            -p semantic-release@24 \
+            -p conventional-changelog-conventionalcommits@8 \
+            semantic-release
+          after=$(git tag --points-at HEAD | grep '^v' || true)
+          if [ -n "$after" ] && [ "$after" != "$before" ]; then
+            echo "tag=$after" >> "$GITHUB_OUTPUT"
+            echo "Released $after"
+          else
+            echo "No release for this push"
+          fi
+
+  build:
+    needs: version
+    if: needs.version.outputs.tag != ''
+    runs-on: windows-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.tag }}
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -22,7 +66,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
-      - run: cargo test --workspace
+      - name: Set app version from tag
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const f = "apps/desktop/src-tauri/tauri.conf.json";
+            const c = JSON.parse(fs.readFileSync(f, "utf8"));
+            c.version = process.env.TAG.replace(/^v/, "");
+            fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+            console.log("version", c.version);
+          '
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -32,11 +86,19 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          tagName: ${{ github.ref_name }}
-          releaseName: Zola Cleaner ${{ github.ref_name }}
-          releaseBody: |
-            Tải `Zola.Cleaner_*_x64-setup.exe` bên dưới và mở để cài (không cần quyền quản trị).
-            App chưa được ký số: nếu Windows hiện "Windows protected your PC", bấm **More info → Run anyway**.
+          # Tải file cài, chữ ký và latest.json lên bản nháp semantic-release vừa tạo
+          tagName: ${{ needs.version.outputs.tag }}
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
+      - name: Add install notes and publish
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes=$(gh release view "$TAG" --json body --jq .body)
+          printf '%s\n\n---\n\n%s\n%s\n' "$notes" \
+            'Tải `Zola.Cleaner_*_x64-setup.exe` bên dưới và mở để cài (không cần quyền quản trị).' \
+            'App chưa được ký số: nếu Windows hiện "Windows protected your PC", bấm **More info → Run anyway**.' \
+            > notes.md
+          gh release edit "$TAG" --title "Zola Cleaner $TAG" --notes-file notes.md --draft=false --latest

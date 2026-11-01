@@ -73,7 +73,7 @@ CONTEXT.md       Thuật ngữ dùng trong code và giao diện
 
 Nên đọc trước: [`CONTEXT.md`](CONTEXT.md) (thuật ngữ), [`docs/zalo-layout.md`](docs/zalo-layout.md) (Zalo lưu file thế nào), [`docs/adr/`](docs/adr) (các quyết định lớn).
 
-Phát hành: tăng `version` trong `apps/desktop/src-tauri/tauri.conf.json`, rồi đẩy tag `vX.Y.Z`. GitHub Actions build file cài, ký bản cập nhật và tạo bản nháp Release.
+Phát hành tự động. Commit theo [Conventional Commits](https://www.conventionalcommits.org). Khi CI trên `main` xanh, [semantic-release](https://semantic-release.gitbook.io) tính version mới từ các commit kể từ tag trước: `feat` tăng minor, `fix`/`perf` tăng patch, `BREAKING CHANGE` tăng major. Commit `docs`, `ci`, `chore`, `refactor` không tạo bản mới. Sau đó GitHub Actions gắn tag, build file cài, ký bản cập nhật và publish Release kèm ghi chú tự sinh. Version lấy từ git tag, nên không cần sửa `version` trong các file cấu hình bằng tay.
 
 Khi viết test hoặc tài liệu, đừng dùng uid hay ID hội thoại Zalo thật. Hãy dùng số giả.
 
