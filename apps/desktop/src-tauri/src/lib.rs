@@ -1,0 +1,586 @@
+//! Vỏ Tauri: command IPC gọi vào zalo-cleaner-core, protocol `thumb://` cho thumbnail.
+//! Không có HTTP server; mọi thao tác trên đĩa chạy ngoài luồng UI.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+
+use serde::Serialize;
+use tauri::http::{Response, StatusCode};
+use tauri::{AppHandle, Emitter, Manager, State};
+use zc_core::db::{self, Root};
+use zc_core::filter::CleanupFilter;
+use zc_core::layout::{self, LayoutCheck};
+use zc_core::quarantine::{self, CleanupPreview, Job, JobOptions, JobResult};
+use zc_core::scan::{ScanOptions, ScanProgress};
+use zc_core::stats::{self, ConversationSummary, Stats};
+use zc_core::suggest::{self, Suggestion};
+use zc_core::{Error, report, safety, thumbs};
+
+/// Lỗi trả về giao diện: `kind` để giao diện chọn cách hiển thị, `message` hiển thị thẳng.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CmdError {
+    kind: &'static str,
+    message: String,
+}
+
+impl From<Error> for CmdError {
+    fn from(e: Error) -> Self {
+        let kind = match e {
+            Error::ZaloRunning => "zaloRunning",
+            Error::Msg(_) => "user",
+            _ => "internal",
+        };
+        if kind == "internal" {
+            log::error!("{e}");
+        }
+        Self {
+            kind,
+            message: e.to_string(),
+        }
+    }
+}
+
+impl CmdError {
+    fn new(kind: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+        }
+    }
+}
+
+type CmdResult<T> = Result<T, CmdError>;
+
+struct Paths {
+    db: PathBuf,
+    thumbs: PathBuf,
+    quarantine: PathBuf,
+}
+
+#[derive(Default)]
+struct Runtime {
+    /// rootId → tiến độ mới nhất của lần quét đang chạy.
+    scanning: HashMap<i64, ScanProgress>,
+    /// Đang cách ly / khôi phục / giải phóng: chỉ một thao tác trên đĩa tại một thời điểm.
+    busy: bool,
+    /// Job tự giải phóng lúc khởi động (hết Retention), để giao diện báo lại.
+    auto_purged: Vec<JobResult>,
+}
+
+struct AppState {
+    paths: Paths,
+    rt: Mutex<Runtime>,
+}
+
+type AppStateRef<'a> = State<'a, Arc<AppState>>;
+
+impl AppState {
+    fn db(&self) -> CmdResult<db::Db> {
+        Ok(db::connect(&self.paths.db)?)
+    }
+    fn job_options(&self) -> JobOptions {
+        JobOptions::new(self.paths.quarantine.clone())
+    }
+}
+
+/// Chạy việc chặn (I/O, SQLite) trên pool riêng để không đứng UI.
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| CmdError::new("internal", e.to_string()))?
+}
+
+/// Giữ khoá "đang có thao tác trên đĩa" trong suốt `f`.
+async fn exclusive<T: Send + 'static>(
+    state: &Arc<AppState>,
+    f: impl FnOnce(&AppState) -> CmdResult<T> + Send + 'static,
+) -> CmdResult<T> {
+    {
+        let mut rt = state.rt.lock().unwrap();
+        if rt.busy {
+            return Err(CmdError::new("busy", "Đang có thao tác khác, vui lòng chờ"));
+        }
+        rt.busy = true;
+    }
+    let s = state.clone();
+    let out = blocking(move || f(&s)).await;
+    state.rt.lock().unwrap().busy = false;
+    out
+}
+
+// --- Trạng thái chung ---
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Health {
+    version: &'static str,
+    zalo_running: bool,
+    scanning: Vec<ScanProgressFor>,
+    busy: bool,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanProgressFor {
+    root_id: i64,
+    #[serde(flatten)]
+    progress: ScanProgress,
+}
+
+#[tauri::command]
+async fn health(state: AppStateRef<'_>) -> CmdResult<Health> {
+    let zalo_running = blocking(|| Ok(safety::is_zalo_running())).await?;
+    let rt = state.rt.lock().unwrap();
+    Ok(Health {
+        version: env!("CARGO_PKG_VERSION"),
+        zalo_running,
+        scanning: rt
+            .scanning
+            .iter()
+            .map(|(&root_id, p)| ScanProgressFor {
+                root_id,
+                progress: p.clone(),
+            })
+            .collect(),
+        busy: rt.busy,
+    })
+}
+
+#[tauri::command]
+fn take_auto_purged(state: AppStateRef<'_>) -> Vec<JobResult> {
+    std::mem::take(&mut state.rt.lock().unwrap().auto_purged)
+}
+
+// --- Media Store ---
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RootInfo {
+    #[serde(flatten)]
+    root: Root,
+    uid: Option<String>,
+    layout: LayoutCheck,
+}
+
+fn root_info(root: Root) -> RootInfo {
+    let path = PathBuf::from(&root.path);
+    RootInfo {
+        uid: layout::account_uid(&path),
+        layout: layout::check_layout(&path),
+        root,
+    }
+}
+
+#[tauri::command]
+async fn roots(state: AppStateRef<'_>) -> CmdResult<Vec<RootInfo>> {
+    let s = state.inner().clone();
+    blocking(move || {
+        Ok(db::list_roots(&s.db()?)?
+            .into_iter()
+            .map(root_info)
+            .collect())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn add_root(state: AppStateRef<'_>, path: String) -> CmdResult<RootInfo> {
+    let s = state.inner().clone();
+    blocking(move || Ok(root_info(db::add_root(&s.db()?, Path::new(&path), None)?))).await
+}
+
+#[tauri::command]
+async fn start_scan(app: AppHandle, state: AppStateRef<'_>, root_id: i64) -> CmdResult<()> {
+    {
+        let rt = state.rt.lock().unwrap();
+        if rt.scanning.contains_key(&root_id) {
+            return Ok(()); // đang quét rồi: giao diện chỉ cần nghe event tiếp
+        }
+    }
+    let s = state.inner().clone();
+    std::thread::spawn(move || {
+        let on_progress = |p: &ScanProgress| {
+            s.rt.lock().unwrap().scanning.insert(root_id, p.clone());
+            let _ = app.emit(
+                "scan-progress",
+                ScanProgressFor {
+                    root_id,
+                    progress: p.clone(),
+                },
+            );
+        };
+        let result = s.db().map_err(|e| e.message).and_then(|db| {
+            zc_core::scan::scan(
+                &db,
+                root_id,
+                &ScanOptions {
+                    on_progress: Some(&on_progress),
+                    cancel: None,
+                },
+            )
+            .map_err(|e| e.to_string())
+        });
+        s.rt.lock().unwrap().scanning.remove(&root_id);
+        if let Err(e) = result {
+            log::error!("Quét thất bại: {e}");
+            let _ = app.emit("scan-error", e);
+        }
+    });
+    Ok(())
+}
+
+// --- Thống kê, Conversation, Suggestion ---
+
+#[tauri::command]
+async fn stats(state: AppStateRef<'_>, root_id: i64) -> CmdResult<Stats> {
+    let s = state.inner().clone();
+    blocking(move || Ok(stats::get_stats(&s.db()?, root_id, 20)?)).await
+}
+
+#[tauri::command]
+async fn suggestions(state: AppStateRef<'_>, root_id: i64) -> CmdResult<Vec<Suggestion>> {
+    let s = state.inner().clone();
+    blocking(move || Ok(suggest::suggestions(&s.db()?, root_id)?)).await
+}
+
+fn check_filter(f: &CleanupFilter) -> CmdResult<()> {
+    match f
+        .categories
+        .iter()
+        .flatten()
+        .find(|c| !safety::is_selectable(c))
+    {
+        Some(bad) => Err(CmdError::new(
+            "user",
+            format!("Loại không được phép chọn: {bad}"),
+        )),
+        None => Ok(()),
+    }
+}
+
+#[tauri::command]
+async fn conversations(
+    state: AppStateRef<'_>,
+    filter: CleanupFilter,
+) -> CmdResult<Vec<ConversationSummary>> {
+    check_filter(&filter)?;
+    let s = state.inner().clone();
+    blocking(move || Ok(stats::list_conversations(&s.db()?, &filter, 6)?)).await
+}
+
+#[tauri::command]
+async fn set_alias(
+    state: AppStateRef<'_>,
+    root_id: i64,
+    conv_id: String,
+    alias: Option<String>,
+) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || {
+        Ok(stats::set_alias(
+            &s.db()?,
+            root_id,
+            &conv_id,
+            alias.as_deref(),
+        )?)
+    })
+    .await
+}
+
+// --- Dọn dẹp ---
+
+#[tauri::command]
+async fn preview(state: AppStateRef<'_>, filter: CleanupFilter) -> CmdResult<CleanupPreview> {
+    check_filter(&filter)?;
+    let s = state.inner().clone();
+    blocking(move || Ok(quarantine::preview_cleanup(&s.db()?, &filter, 20)?)).await
+}
+
+/// Chỉ dọn Media Store có Supported Layout.
+fn assert_supported(db: &db::Db, root_id: i64) -> CmdResult<()> {
+    let root = db::get_root(db, root_id)?
+        .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
+    match layout::check_layout(Path::new(&root.path)) {
+        LayoutCheck::Supported => Ok(()),
+        LayoutCheck::Unsupported { reasons } => Err(CmdError::new(
+            "unsupported",
+            format!(
+                "Cấu trúc thư mục Zalo này chưa được hỗ trợ, app chỉ xem không dọn: {}",
+                reasons.join("; ")
+            ),
+        )),
+    }
+}
+
+#[tauri::command]
+async fn quarantine(state: AppStateRef<'_>, filter: CleanupFilter) -> CmdResult<JobResult> {
+    check_filter(&filter)?;
+    if state
+        .rt
+        .lock()
+        .unwrap()
+        .scanning
+        .contains_key(&filter.root_id)
+    {
+        return Err(CmdError::new("busy", "Đang quét, vui lòng chờ quét xong"));
+    }
+    exclusive(state.inner(), move |s| {
+        let db = s.db()?;
+        assert_supported(&db, filter.root_id)?;
+        let r = quarantine::quarantine(&db, &filter, &s.job_options())?;
+        log::info!(
+            "Cách ly job #{}: {} file, {} byte, {} lỗi",
+            r.job_id,
+            r.moved,
+            r.bytes,
+            r.failed
+        );
+        Ok(r)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn jobs(state: AppStateRef<'_>, root_id: i64) -> CmdResult<Vec<Job>> {
+    let s = state.inner().clone();
+    blocking(move || Ok(quarantine::list_jobs(&s.db()?, root_id)?)).await
+}
+
+#[tauri::command]
+async fn restore(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
+    exclusive(state.inner(), move |s| {
+        let r = quarantine::restore_job(&s.db()?, job_id, &s.job_options())?;
+        log::info!(
+            "Khôi phục job #{job_id}: {} file, {} lỗi",
+            r.moved,
+            r.failed
+        );
+        Ok(r)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn purge(state: AppStateRef<'_>, job_id: i64) -> CmdResult<JobResult> {
+    exclusive(state.inner(), move |s| {
+        let r = quarantine::purge_job(&s.db()?, job_id)?;
+        log::info!(
+            "Giải phóng job #{job_id}: {} file, {} byte, {} lỗi",
+            r.moved,
+            r.bytes,
+            r.failed
+        );
+        Ok(r)
+    })
+    .await
+}
+
+// --- Báo cáo / nhật ký ---
+
+#[tauri::command]
+async fn export_report(state: AppStateRef<'_>, root_id: i64, path: String) -> CmdResult<()> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let root = db::get_root(&s.db()?, root_id)?
+            .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
+        let r = report::structure_report(Path::new(&root.path));
+        let json = serde_json::to_string_pretty(&serde_json::json!({
+            "app": env!("CARGO_PKG_VERSION"),
+            "report": r,
+        }))
+        .map_err(|e| CmdError::new("internal", e.to_string()))?;
+        std::fs::write(&path, json).map_err(|e| CmdError::new("user", e.to_string()))
+    })
+    .await
+}
+
+/// Lược đường dẫn người dùng và các dãy số dài (uid, ID hội thoại, Message Time) khỏi một dòng nhật ký.
+fn sanitize_log(line: &str, home: &str) -> String {
+    let line = if home.is_empty() {
+        line.to_owned()
+    } else {
+        line.replace(home, "%USERPROFILE%")
+    };
+    let mut out = String::with_capacity(line.len());
+    let mut digits = String::new();
+    for ch in line.chars().chain(std::iter::once('\0')) {
+        if ch.is_ascii_digit() {
+            digits.push(ch);
+            continue;
+        }
+        if digits.len() >= 10 {
+            out.push_str("<id>");
+        } else {
+            out.push_str(&digits);
+        }
+        digits.clear();
+        if ch != '\0' {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+#[tauri::command]
+async fn export_log(app: AppHandle, path: String) -> CmdResult<()> {
+    let dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| CmdError::new("internal", e.to_string()))?;
+    blocking(move || {
+        let home = std::env::var("USERPROFILE").unwrap_or_default();
+        let raw = std::fs::read_to_string(dir.join("zalo-cleaner.log")).unwrap_or_default();
+        let clean: Vec<String> = raw.lines().map(|l| sanitize_log(l, &home)).collect();
+        std::fs::write(&path, clean.join("\n")).map_err(|e| CmdError::new("user", e.to_string()))
+    })
+    .await
+}
+
+// --- Khởi động ---
+
+fn app_paths() -> Paths {
+    let roaming = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let local = std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| roaming.clone());
+    let data = roaming.join("zalo-cleaner");
+    Paths {
+        db: data.join("zalo-cleaner.db"),
+        thumbs: local.join("zalo-cleaner").join("thumbs"),
+        quarantine: quarantine::default_quarantine_base(&roaming),
+    }
+}
+
+/// Tạo CSDL, tự thêm Media Store tìm thấy, tự giải phóng job hết Retention.
+fn init(paths: &Paths) -> zc_core::Result<Vec<JobResult>> {
+    let db = db::open_db(&paths.db)?;
+    if db::list_roots(&db)?.is_empty()
+        && let Some(app_data) = std::env::var_os("APPDATA")
+    {
+        for store in layout::detect_media_stores(Path::new(&app_data)) {
+            db::add_root(&db, &store, None)?;
+        }
+    }
+    let purged = quarantine::purge_expired(&db, db::now_ms())?;
+    for r in &purged {
+        log::info!(
+            "Tự giải phóng job #{} (hết thời gian giữ): {} file, {} byte",
+            r.job_id,
+            r.moved,
+            r.bytes
+        );
+    }
+    Ok(purged)
+}
+
+fn thumb_response(state: &AppState, uri_path: &str) -> Response<Vec<u8>> {
+    let not_found = || {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Vec::new())
+            .unwrap()
+    };
+    let Ok(item_id) = uri_path.trim_matches('/').parse::<i64>() else {
+        return not_found();
+    };
+    let found = state.db().ok().and_then(|db| {
+        thumbs::render_thumbnail(&db, item_id, &state.paths.thumbs)
+            .ok()
+            .flatten()
+    });
+    let Some(src) = found else { return not_found() };
+    match std::fs::read(&src.file) {
+        Ok(bytes) => Response::builder()
+            .header("Content-Type", src.content_type)
+            .header("Cache-Control", "max-age=86400")
+            .body(bytes)
+            .unwrap(),
+        Err(_) => not_found(),
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let paths = app_paths();
+    let state = Arc::new(AppState {
+        paths,
+        rt: Mutex::new(Runtime::default()),
+    });
+    let thumb_state = state.clone();
+
+    tauri::Builder::default()
+        // Mở app lần hai → đưa cửa sổ đang có lên trước
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("zalo-cleaner".into()),
+                    },
+                ))
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol("thumb", move |_ctx, request, responder| {
+            let s = thumb_state.clone();
+            let path = request.uri().path().to_owned();
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(thumb_response(&s, &path))
+            });
+        })
+        .setup(move |app| {
+            match init(&state.paths) {
+                Ok(purged) => state.rt.lock().unwrap().auto_purged = purged,
+                Err(e) => log::error!("Khởi tạo thất bại: {e}"),
+            }
+            app.manage(state);
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            health,
+            take_auto_purged,
+            roots,
+            add_root,
+            start_scan,
+            stats,
+            suggestions,
+            conversations,
+            set_alias,
+            preview,
+            quarantine,
+            jobs,
+            restore,
+            purge,
+            export_report,
+            export_log,
+        ])
+        .run(tauri::generate_context!())
+        .expect("không khởi động được Zalo Cleaner");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_log;
+
+    #[test]
+    fn nhat_ky_khong_lo_duong_dan_va_id() {
+        let line = r"Quét C:\Users\an\AppData\Roaming\ZaloData\media\9533337693992746410\ZaloDownloads xong: 123 file";
+        assert_eq!(
+            sanitize_log(line, r"C:\Users\an"),
+            r"Quét %USERPROFILE%\AppData\Roaming\ZaloData\media\<id>\ZaloDownloads xong: 123 file"
+        );
+    }
+}

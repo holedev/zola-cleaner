@@ -326,7 +326,7 @@ fn cach_ly_go_moi_link_khoi_phuc_tao_lai_hardlink_purge_xoa_han() {
     ); // chưa hết Retention
     let p = purge_job(&s.db, q2.job_id).unwrap();
     assert_eq!(p.bytes, 100);
-    assert!(!s.quarantine_base.join(q2.job_id.to_string()).exists());
+    assert!(fs::read_dir(&s.quarantine_base).unwrap().next().is_none()); // thư mục job đã bị xoá
     assert_eq!(s.status_of(a_id), "deleted");
     assert!(restore_job(&s.db, q2.job_id, &s.opts()).is_err());
 }
@@ -479,4 +479,18 @@ fn chi_don_supported_layout() {
     // Media Store giả của các test khác: không đúng vị trí, không có config
     let s = setup();
     assert!(!check_layout(&s.store).is_supported());
+}
+
+#[test]
+fn purge_khong_dung_toi_thu_muc_cach_ly_cua_job_khac_trung_so() {
+    let s = setup();
+    // Thư mục của một job cũ (bản app khác / CSDL đã bị xoá) mang cùng số 1
+    let old = s.quarantine_base.join("1");
+    fs::create_dir_all(&old).unwrap();
+    fs::write(old.join("keep.jpg"), b"old").unwrap();
+
+    let q = quarantine(&s.db, &s.filter(&["111"]), &s.opts()).unwrap();
+    assert_eq!(q.job_id, 1);
+    purge_job(&s.db, q.job_id).unwrap();
+    assert!(old.join("keep.jpg").exists());
 }

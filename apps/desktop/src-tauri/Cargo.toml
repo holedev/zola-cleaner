@@ -1,0 +1,26 @@
+[package]
+name = "zalo-cleaner-desktop"
+description = "Zalo Cleaner — app desktop (Tauri)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+# Hậu tố `_lib` để tên lib khác tên bin (lỗi trùng tên trên Windows: rust-lang/cargo#8519)
+name = "zc_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+zalo-cleaner-core = { path = "../../../crates/core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-log = "2"
+log = "0.4.35"

@@ -49,7 +49,9 @@ pub fn anonymize(name: &str) -> String {
     let mut out = String::new();
     let mut i = 0;
     while i < b.len() {
-        let hex_end = (i..b.len()).find(|&j| !b[j].is_ascii_hexdigit()).unwrap_or(b.len());
+        let hex_end = (i..b.len())
+            .find(|&j| !b[j].is_ascii_hexdigit())
+            .unwrap_or(b.len());
         // Dãy hex phải có chữ a–f, không thì là dãy số (ID 19 chữ số cũng toàn ký tự hex)
         if hex_end - i >= 16 && b[i..hex_end].iter().any(u8::is_ascii_alphabetic) {
             out.push_str(&format!("<hex{}>", hex_end - i));
@@ -57,23 +59,39 @@ pub fn anonymize(name: &str) -> String {
             continue;
         }
         if b[i].is_ascii_digit() {
-            let end = (i..b.len()).find(|&j| !b[j].is_ascii_digit()).unwrap_or(b.len());
+            let end = (i..b.len())
+                .find(|&j| !b[j].is_ascii_digit())
+                .unwrap_or(b.len());
             let n = end - i;
-            out.push_str(&if n >= 10 { format!("<n{n}>") } else { "<n>".to_owned() });
+            out.push_str(&if n >= 10 {
+                format!("<n{n}>")
+            } else {
+                "<n>".to_owned()
+            });
             i = end;
             continue;
         }
         // Giữ ký tự an toàn (chữ, dấu nối); ký tự khác (có dấu, khoảng trắng…) → '?'
         let ch = name[i..].chars().next().unwrap();
-        out.push(if ch.is_ascii_alphanumeric() || "._-".contains(ch) { ch } else { '?' });
+        out.push(if ch.is_ascii_alphanumeric() || "._-".contains(ch) {
+            ch
+        } else {
+            '?'
+        });
         i += ch.len_utf8();
     }
     out
 }
 
 fn build(dir: &Path, name: String, depth: usize) -> DirNode {
-    let mut node = DirNode { name, merged: 1, ..Default::default() };
-    let Ok(entries) = fsx::list_dir(dir) else { return node };
+    let mut node = DirNode {
+        name,
+        merged: 1,
+        ..Default::default()
+    };
+    let Ok(entries) = fsx::list_dir(dir) else {
+        return node;
+    };
     let mut patterns: BTreeMap<String, u64> = BTreeMap::new();
     let mut sampled = 0;
     let mut children: BTreeMap<String, DirNode> = BTreeMap::new();
@@ -84,13 +102,22 @@ fn build(dir: &Path, name: String, depth: usize) -> DirNode {
         let path = dir.join(&e.name);
         if e.is_dir {
             let child = build(&path, anonymize(&e.name), depth + 1);
-            let slot = children.entry(child.name.clone()).or_insert_with(|| DirNode { name: child.name.clone(), merged: 0, ..Default::default() });
+            let slot = children
+                .entry(child.name.clone())
+                .or_insert_with(|| DirNode {
+                    name: child.name.clone(),
+                    merged: 0,
+                    ..Default::default()
+                });
             merge(slot, child, depth + 1 >= MAX_DEPTH);
             continue;
         }
         node.files += 1;
         node.bytes += e.size;
-        let ext = Path::new(&e.name).extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+        let ext = Path::new(&e.name)
+            .extension()
+            .map(|x| x.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
         *node.extensions.entry(ext).or_default() += 1;
         *patterns.entry(anonymize(&e.name)).or_default() += 1;
         if sampled < NLINK_SAMPLE {
@@ -101,7 +128,7 @@ fn build(dir: &Path, name: String, depth: usize) -> DirNode {
         }
     }
     let mut patterns: Vec<(String, u64)> = patterns.into_iter().collect();
-    patterns.sort_by(|a, b| b.1.cmp(&a.1));
+    patterns.sort_by_key(|p| std::cmp::Reverse(p.1));
     patterns.truncate(TOP_PATTERNS);
     node.name_patterns = patterns;
     node.children = children.into_values().collect();
@@ -124,7 +151,7 @@ fn merge(slot: &mut DirNode, child: DirNode, flatten: bool) {
         *pats.entry(k).or_default() += v;
     }
     let mut pats: Vec<_> = pats.into_iter().collect();
-    pats.sort_by(|a, b| b.1.cmp(&a.1));
+    pats.sort_by_key(|p| std::cmp::Reverse(p.1));
     pats.truncate(TOP_PATTERNS);
     slot.name_patterns = pats;
     if flatten {
@@ -144,15 +171,28 @@ fn merge(slot: &mut DirNode, child: DirNode, flatten: bool) {
 
 /// Lập Structure Report cho một Media Store. Chỉ đọc.
 pub fn structure_report(store: &Path) -> StructureReport {
-    const SAFE_KEYS: [&str; 4] = ["major_version", "migrate_full_done", "db_version", "current_bu_ver"];
+    const SAFE_KEYS: [&str; 4] = [
+        "major_version",
+        "migrate_full_done",
+        "db_version",
+        "current_bu_ver",
+    ];
     let zalo_config = store
         .ancestors()
         .nth(3)
         .and_then(|z| std::fs::read_to_string(z.join("config.json")).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&s).ok())
-        .map(|m| m.into_iter().filter(|(k, _)| SAFE_KEYS.contains(&k.as_str())).collect())
+        .map(|m| {
+            m.into_iter()
+                .filter(|(k, _)| SAFE_KEYS.contains(&k.as_str()))
+                .collect()
+        })
         .unwrap_or_default();
-    StructureReport { layout: check_layout(store), zalo_config, tree: build(store, "ZaloDownloads".into(), 0) }
+    StructureReport {
+        layout: check_layout(store),
+        zalo_config,
+        tree: build(store, "ZaloDownloads".into(), 0),
+    }
 }
 
 #[cfg(test)]
@@ -162,11 +202,16 @@ mod tests {
     #[test]
     fn an_danh_ten_file() {
         assert_eq!(
-            anonymize("1761444265166_96907541858280938_g9876055223380920618_0123456789abcdef0123456789abcdef.jxl"),
+            anonymize(
+                "1761444265166_96907541858280938_g9876055223380920618_0123456789abcdef0123456789abcdef.jxl"
+            ),
             "<n13>_<n17>_g<n19>_<hex32>.jxl"
         );
         assert_eq!(anonymize("9876055223380920618_group"), "<n19>_group");
-        assert_eq!(anonymize("z7156140507732_acadbd2d.jxl"), "z<n13>_acadbd<n>d.jxl");
+        assert_eq!(
+            anonymize("z7156140507732_acadbd2d.jxl"),
+            "z<n13>_acadbd<n>d.jxl"
+        );
         assert_eq!(anonymize("Ảnh của tôi.png"), "?nh?c?a?t?i.png");
         assert_eq!(anonymize("picture"), "picture");
     }

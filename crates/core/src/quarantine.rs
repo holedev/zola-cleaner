@@ -310,7 +310,15 @@ pub fn quarantine(db: &Db, filter: &CleanupFilter, opts: &JobOptions) -> Result<
         ],
     )?;
     let job_id = db.last_insert_rowid();
-    let job_dir = base.join(job_id.to_string());
+    // Kèm thời điểm tạo: CSDL bị xoá / bản app khác dùng chung thư mục cách ly thì jobId lặp lại,
+    // trùng thư mục sẽ khiến Purge job mới xoá luôn file của job cũ
+    let job_dir = base.join(format!("{job_id}-{now}"));
+    if job_dir.exists() {
+        return Err(Error::Msg(format!(
+            "Thư mục cách ly đã tồn tại: {}",
+            job_dir.display()
+        )));
+    }
     db.execute(
         "UPDATE jobs SET quarantine_dir = ? WHERE id = ?",
         params![job_dir.to_string_lossy(), job_id],

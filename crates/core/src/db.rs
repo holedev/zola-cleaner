@@ -128,6 +128,15 @@ pub fn open_db(file: &Path) -> Result<Db> {
     Ok(db)
 }
 
+/// Mở thêm một kết nối tới CSDL đã được [`open_db`] tạo. Nhờ WAL, đọc được trong lúc một kết nối khác đang ghi (quét).
+pub fn connect(file: &Path) -> Result<Db> {
+    let db = Connection::open(file)?;
+    db.execute_batch(
+        "PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 10000;",
+    )?;
+    Ok(db)
+}
+
 /// Chạy `f` trong một transaction; lỗi → rollback.
 pub fn tx<T>(db: &Db, f: impl FnOnce(&Transaction) -> Result<T>) -> Result<T> {
     let t = db.unchecked_transaction()?;
