@@ -46,6 +46,18 @@
         ],
         "displayLanguageSelector": false
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDExODhBMDMyNTNDNENEQ0UKUldUT3pjUlRNcUNJRVVEdG9NUnlQYzRRaklXUm4xYlF6aHlGZ2FHS1JYM1BPSDlBWHoycnJrNVoK",
+      "endpoints": [
+        "https://github.com/holedev/zola-cleaner/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage, formatBytes, type ScanProgress, shortUid } from "@/lib/api";
+import { checkForUpdate } from "@/lib/updater";
 import { keys, useHealth, useInvalidateIndex, useRoots } from "@/lib/queries";
 import { ConversationsPage } from "@/pages/conversations";
 import { JobsPage } from "@/pages/jobs";
@@ -131,6 +132,8 @@ export default function App() {
       const bytes = list.reduce((s, r) => s + r.bytes, 0);
       if (list.length) toast.info(`Đã tự xoá vĩnh viễn ${formatBytes(bytes)} nằm trong thùng rác quá 7 ngày.`);
     });
+    // Bản dev không có bản phát hành để so → chỉ kiểm tra ở bản cài thật
+    if (import.meta.env.PROD) void checkForUpdate(true);
   }, [rootId, health.data, scan, showScan, qc]);
 
   // Đóng app khi thùng rác còn file → nhắc dọn sạch

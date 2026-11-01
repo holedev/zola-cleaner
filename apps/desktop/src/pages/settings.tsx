@@ -17,6 +17,7 @@ import {
   FolderX,
   HardDrive,
   RotateCcw,
+  RefreshCw,
   ScrollText,
   TriangleAlert,
   X,
@@ -31,8 +32,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { accountName, api, errorMessage, formatBytes, type RootInfo, shortUid, type TrashSetting } from "@/lib/api";
-import { keys, useRoots } from "@/lib/queries";
+import { keys, useHealth, useRoots } from "@/lib/queries";
+import { checkForUpdate } from "@/lib/updater";
 
 /** Gợi ý chung khi chọn thư mục dữ liệu Zalo. */
 const DATA_PICK_HINT = '(ZaloData, "Zalo Data", media hoặc ZaloDownloads)';
@@ -83,6 +86,13 @@ export function SettingsPage() {
       for (const r of roots.data ?? []) await api.refreshDocNames(r.id);
     }, "Đang tìm lại tên tài liệu ở chế độ nền…");
 
+  const health = useHealth();
+  const [checking, setChecking] = useState(false);
+  const checkUpdate = async () => {
+    setChecking(true);
+    await checkForUpdate(false);
+    setChecking(false);
+  };
   const exportLog = async () => {
     const path = await save({ title: "Lưu nhật ký", defaultPath: "zola-cleaner-nhat-ky.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
     if (!path) return;
@@ -247,11 +257,18 @@ export function SettingsPage() {
       </section>
 
       <section className="grid gap-3">
-        <SectionTitle title="Hỗ trợ" hint="App không gửi dữ liệu nào ra ngoài. Nhật ký chỉ được lưu vào file bạn chọn để gửi cho nhà phát triển khi gặp lỗi." />
-        <div>
+        <SectionTitle
+          title="Hỗ trợ"
+          hint="App không gửi dữ liệu nào của bạn ra ngoài; chỉ hỏi GitHub xem có bản mới không. Nhật ký chỉ được lưu vào file bạn chọn để gửi cho nhà phát triển khi gặp lỗi."
+        />
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={exportLog}>
             <ScrollText /> Xuất nhật ký
           </Button>
+          <Button variant="outline" disabled={checking} onClick={checkUpdate}>
+            {checking ? <Spinner /> : <RefreshCw />} Kiểm tra bản mới
+          </Button>
+          {health.data && <span className="text-muted-foreground text-sm">Phiên bản {health.data.version}</span>}
         </div>
         <p className="text-muted-foreground text-xs">Zola Cleaner là phần mềm mã nguồn mở độc lập, không liên kết với Zalo hay VNG.</p>
       </section>
