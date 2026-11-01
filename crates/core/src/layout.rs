@@ -97,6 +97,113 @@ pub fn detect_media_stores(app_data: &Path) -> Vec<PathBuf> {
     stores
 }
 
+/// uid của Account sở hữu Media Store (`media\<uid>\ZaloDownloads`), nếu đúng cấu trúc.
+pub fn account_uid(store: &Path) -> Option<String> {
+    let uid = store.parent()?.file_name()?.to_str()?;
+    all_digits(uid).then(|| uid.to_owned())
+}
+
+/// Media Store có Supported Layout không. Không → chỉ được xem, không được dọn.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+pub enum LayoutCheck {
+    Supported,
+    Unsupported { reasons: Vec<String> },
+}
+
+impl LayoutCheck {
+    pub fn is_supported(&self) -> bool {
+        matches!(self, Self::Supported)
+    }
+}
+
+/// Số file mẫu trong `picture/` dùng để kiểm tra Zalo có tạo hardlink trong `resource/` không.
+const SAMPLE_FILES: usize = 40;
+
+/// Kiểm tra Media Store có đúng cấu trúc Zalo 5.x đã khảo sát (docs/zalo-layout.md) không.
+pub fn check_layout(store: &Path) -> LayoutCheck {
+    let mut reasons = Vec::new();
+    if account_uid(store).is_none()
+        || store.file_name().and_then(|n| n.to_str()) != Some("ZaloDownloads")
+    {
+        reasons.push("Thư mục không có dạng ZaloData\\media\\<uid>\\ZaloDownloads".to_owned());
+    }
+    for dir in ["picture", "resource"] {
+        if !store.join(dir).is_dir() {
+            reasons.push(format!("Thiếu thư mục {dir}\\"));
+        }
+    }
+
+    // ZaloData\config.json: Zalo 5.x, đã chuyển media sang vị trí mới
+    let config = store
+        .ancestors()
+        .nth(3)
+        .map(|zalo_data| zalo_data.join("config.json"));
+    match config
+        .and_then(|c| std::fs::read_to_string(c).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+    {
+        None => reasons.push("Không đọc được ZaloData\\config.json".to_owned()),
+        Some(cfg) => {
+            let major = cfg.get("major_version").and_then(serde_json::Value::as_i64);
+            if major != Some(5) {
+                reasons.push(format!(
+                    "Zalo phiên bản chính {} (mới hỗ trợ 5)",
+                    major.map_or("?".into(), |m| m.to_string())
+                ));
+            }
+            if cfg
+                .get("migrate_full_done")
+                .and_then(serde_json::Value::as_bool)
+                != Some(true)
+            {
+                reasons.push("Zalo chưa chuyển xong media sang vị trí mới".to_owned());
+            }
+        }
+    }
+
+    // Phải thấy ít nhất một ảnh trong picture/ có hardlink (nlink ≥ 2) — đó là cách app gắn ảnh với hội thoại
+    if store.join("picture").is_dir() {
+        let linked = sample_files(&store.join("picture"), SAMPLE_FILES)
+            .iter()
+            .any(|f| crate::fsx::file_key(f).is_ok_and(|(_, n)| n >= 2));
+        if !linked {
+            reasons.push("Không thấy hardlink giữa picture\\ và resource\\".to_owned());
+        }
+    }
+
+    if reasons.is_empty() {
+        LayoutCheck::Supported
+    } else {
+        LayoutCheck::Unsupported { reasons }
+    }
+}
+
+/// Tối đa `n` file (không phải `.rescache`) trong các thư mục con cấp 1 của `dir`.
+fn sample_files(dir: &Path, n: usize) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let Ok(subdirs) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for sub in subdirs
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+    {
+        let Ok(files) = std::fs::read_dir(sub.path()) else {
+            continue;
+        };
+        for f in files.flatten() {
+            if f.file_name() != RESCACHE_NAME && f.file_type().is_ok_and(|t| t.is_file()) {
+                out.push(f.path());
+                if out.len() >= n {
+                    return out;
+                }
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -451,3 +451,32 @@ fn jpeg_xl_thanh_thumbnail_jpeg_canh_dai_320() {
     let w = u16::from_be_bytes([jpg[sof + 7], jpg[sof + 8]]);
     assert_eq!((w, h), (320, 200));
 }
+
+#[test]
+fn chi_don_supported_layout() {
+    use zc_core::layout::{LayoutCheck, account_uid, check_layout};
+    let dir = tempfile::tempdir().unwrap();
+    let zalo_data = dir.path().join("ZaloData");
+    let store = zalo_data.join("media").join("123456").join("ZaloDownloads");
+    let a = put(&store, "picture/111/za_a.jpg", JPEG, 100);
+    link(
+        &store,
+        &a,
+        "resource/111/picture/1600000000001_sender_111_a.jpg",
+    );
+    let config = zalo_data.join("config.json");
+    fs::write(&config, r#"{"major_version":5,"migrate_full_done":true}"#).unwrap();
+
+    assert_eq!(account_uid(&store).as_deref(), Some("123456"));
+    assert_eq!(check_layout(&store), LayoutCheck::Supported);
+
+    fs::write(&config, r#"{"major_version":4}"#).unwrap();
+    let LayoutCheck::Unsupported { reasons } = check_layout(&store) else {
+        panic!("phải bị từ chối")
+    };
+    assert_eq!(reasons.len(), 2, "{reasons:?}"); // phiên bản + chưa chuyển media
+
+    // Media Store giả của các test khác: không đúng vị trí, không có config
+    let s = setup();
+    assert!(!check_layout(&s.store).is_supported());
+}

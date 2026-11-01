@@ -7,6 +7,7 @@ pub mod filter;
 pub mod fsx;
 pub mod layout;
 pub mod quarantine;
+pub mod report;
 pub mod safety;
 pub mod scan;
 pub mod stats;
