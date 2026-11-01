@@ -65,7 +65,26 @@ export interface CleanupFilter {
   minSize?: number;
   /** Chỉ Media Item có thời điểm tin nhắn trước mốc này (epoch ms). */
   beforeTs?: number;
+  /** File người dùng bỏ tick trong màn xem trước — giữ lại. */
+  excludeIds?: number[];
 }
+
+export interface CleanupItem {
+  id: number;
+  category: string;
+  kind: string;
+  size: number;
+  ts: number;
+  convId: string | null;
+}
+
+export interface CleanupItems {
+  total: number;
+  items: CleanupItem[];
+}
+
+export type ItemGroup = "media" | "docs";
+export type ItemOrder = "largest" | "newest" | "oldest";
 
 export interface MonthBucket {
   /** "YYYY-MM" theo giờ máy. */
@@ -174,6 +193,8 @@ export const api = {
     call<void>("set_alias", { rootId, convId, alias }),
   preview: (filter: CleanupFilter) => call<CleanupPreview>("preview", { filter }),
   quarantine: (filter: CleanupFilter) => call<JobResult>("quarantine", { filter }),
+  cleanupItems: (filter: CleanupFilter, group: ItemGroup, order: ItemOrder, offset: number, limit: number) =>
+    call<CleanupItems>("cleanup_items", { filter, group, order, offset, limit }),
   jobs: (rootId: number) => call<Job[]>("jobs", { rootId }),
   restore: (jobId: number) => call<JobResult>("restore", { jobId }),
   purge: (jobId: number) => call<JobResult>("purge", { jobId }),

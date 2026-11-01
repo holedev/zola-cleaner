@@ -628,3 +628,89 @@ pub fn purge_expired(db: &Db, now: i64) -> Result<Vec<JobResult>> {
     };
     ids.into_iter().map(|id| purge_job(db, id)).collect()
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupItem {
+    pub id: i64,
+    pub category: String,
+    pub kind: String,
+    pub size: i64,
+    pub ts: i64,
+    /// Một Conversation của Media Item (để người dùng biết file từ đâu).
+    pub conv_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupItems {
+    pub total: i64,
+    pub items: Vec<CleanupItem>,
+}
+
+/// Danh sách Media Item sẽ bị dọn theo bộ lọc, theo trang — để người dùng xem trước và bỏ tick.
+/// `group`: "media" (ảnh + video) hoặc "docs" (còn lại). `order`: "largest" | "newest" | "oldest".
+/// Bỏ qua `exclude_ids`: file đã bỏ tick vẫn hiện (ở trạng thái không tick).
+pub fn cleanup_items(
+    db: &Db,
+    filter: &CleanupFilter,
+    group: &str,
+    order: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<CleanupItems> {
+    let f = CleanupFilter {
+        exclude_ids: None,
+        ..filter.clone()
+    };
+    let w = f.candidate_where();
+    let s = f.shared_cond();
+    let group_cond = if group == "media" {
+        "i.category IN ('image', 'video')"
+    } else {
+        "i.category NOT IN ('image', 'video')"
+    };
+    let order_by = match order {
+        "newest" => format!("{ITEM_TS} DESC"),
+        "oldest" => format!("{ITEM_TS} ASC"),
+        _ => "i.size DESC".to_owned(),
+    };
+    let base = format!(
+        "FROM items i WHERE {} AND NOT {} AND {group_cond}",
+        w.sql, s.sql
+    );
+    let params = || -> Vec<Value> {
+        w.params
+            .iter()
+            .cloned()
+            .chain(s.params.iter().cloned())
+            .collect()
+    };
+
+    let total: i64 = db.query_row(
+        &format!("SELECT COUNT(*) {base}"),
+        params_from_iter(params()),
+        |r| r.get(0),
+    )?;
+    let mut q = db.prepare(&format!(
+        "SELECT i.id, i.category, i.kind, i.size, {ITEM_TS},
+           (SELECT conv_id FROM links WHERE item_id = i.id AND conv_id IS NOT NULL LIMIT 1)
+         {base} ORDER BY {order_by}, i.id LIMIT ? OFFSET ?"
+    ))?;
+    let mut p = params();
+    p.push(Value::Integer(limit));
+    p.push(Value::Integer(offset));
+    let items = q
+        .query_map(params_from_iter(p), |r| {
+            Ok(CleanupItem {
+                id: r.get(0)?,
+                category: r.get(1)?,
+                kind: r.get(2)?,
+                size: r.get(3)?,
+                ts: r.get(4)?,
+                conv_id: r.get(5)?,
+            })
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(CleanupItems { total, items })
+}

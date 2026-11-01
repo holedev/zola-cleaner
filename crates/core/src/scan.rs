@@ -259,7 +259,11 @@ fn run(
                         .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
                         .unwrap_or_default();
                     let noise = it.area == "fileNoise";
-                    let mut d = if noise { detect_noise(&h, &ext) } else { detect(&h, &ext) };
+                    let mut d = if noise {
+                        detect_noise(&h, &ext)
+                    } else {
+                        detect(&h, &ext)
+                    };
                     // ZIP / Office: 64 byte đầu chưa đủ biết là Word, Excel hay PowerPoint → đọc thêm đầu + cuối file
                     if matches!(d.kind.as_str(), "zip" | "office" | "ole")
                         && let Ok((mut head, tail)) = fsx::read_head_tail(&it.abs, CONTAINER_PROBE)
@@ -268,7 +272,10 @@ fn run(
                             unnoise_prefix(&mut head, 0);
                         }
                         if let Some(k) = refine_container(&d.kind, &head, &tail) {
-                            d = Detection { category: Category::Document, kind: k.to_owned() };
+                            d = Detection {
+                                category: Category::Document,
+                                kind: k.to_owned(),
+                            };
                         }
                     }
                     it.detection = Some(d);

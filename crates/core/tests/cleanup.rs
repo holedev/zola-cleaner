@@ -559,8 +559,18 @@ fn tai_lieu_gan_day_va_mo_file() {
     let s = setup();
     // Mặc định (ảnh + video) → không có tài liệu nào sẽ bị dọn
     let convs = list_conversations(&s.db, &s.filter(&[]), 8).unwrap();
-    assert!(convs.iter().find(|c| c.conv_id == "111").unwrap().recent_docs.is_empty());
-    let docs = CleanupFilter { categories: Some(vec!["document".into()]), ..s.filter(&[]) };
+    assert!(
+        convs
+            .iter()
+            .find(|c| c.conv_id == "111")
+            .unwrap()
+            .recent_docs
+            .is_empty()
+    );
+    let docs = CleanupFilter {
+        categories: Some(vec!["document".into()]),
+        ..s.filter(&[])
+    };
     let convs = list_conversations(&s.db, &docs, 8).unwrap();
     let c1 = convs.iter().find(|c| c.conv_id == "111").unwrap();
     assert_eq!(c1.recent_docs.len(), 1);
@@ -604,7 +614,11 @@ fn file_noise_chi_xor_100_byte_dau_va_co_duoi() {
     pdf.extend_from_slice(b"\n%%EOF\n");
     let raw = zalo_noise(&pdf);
     let f = put(&s.store, "fileNoise/realpdf", &raw, raw.len());
-    link(&s.store, &f, "resource/444/fileNoise/1600000000007_sender_444");
+    link(
+        &s.store,
+        &f,
+        "resource/444/fileNoise/1600000000007_sender_444",
+    );
 
     // docx có mục đầu là docProps/ (không phải word/) — chỉ thư mục trung tâm ở cuối file cho biết là Word
     let mut docx = b"PK\x03\x04".to_vec();
@@ -615,11 +629,20 @@ fn file_noise_chi_xor_100_byte_dau_va_co_duoi() {
     docx.extend_from_slice(b"PK\x01\x02word/document.xmlPK\x05\x06");
     let rawx = zalo_noise(&docx);
     let x = put(&s.store, "fileNoise/realdocx", &rawx, rawx.len());
-    link(&s.store, &x, "resource/444/fileNoise/1600000000008_sender_444");
+    link(
+        &s.store,
+        &x,
+        "resource/444/fileNoise/1600000000008_sender_444",
+    );
     s.rescan();
 
     let kind_of = |rel: &str| -> String {
-        s.db.query_row("SELECT kind FROM items WHERE id = ?", [s.item_id_of(rel)], |r| r.get(0)).unwrap()
+        s.db.query_row(
+            "SELECT kind FROM items WHERE id = ?",
+            [s.item_id_of(rel)],
+            |r| r.get(0),
+        )
+        .unwrap()
     };
     assert_eq!(kind_of("fileNoise/realpdf"), "pdf");
     assert_eq!(kind_of("fileNoise/realdocx"), "docx");
@@ -644,7 +667,53 @@ fn tim_moi_tai_khoan_zalo_tren_may() {
     fs::create_dir_all(z.join("Database/_production/Encrypt")).unwrap();
 
     let acc = detect_accounts(dir.path());
-    assert_eq!(acc.iter().map(|a| a.uid.as_str()).collect::<Vec<_>>(), ["111", "222"]);
+    assert_eq!(
+        acc.iter().map(|a| a.uid.as_str()).collect::<Vec<_>>(),
+        ["111", "222"]
+    );
     assert!(acc[0].store.is_some());
     assert!(acc[1].store.is_none());
+}
+
+#[test]
+fn xem_truoc_tung_file_va_bo_tick() {
+    use zc_core::quarantine::cleanup_items;
+    let s = setup();
+    let f = CleanupFilter {
+        categories: Some(vec!["image".into(), "video".into(), "document".into()]),
+        ..s.filter(&["111", "g222"])
+    };
+    let media = cleanup_items(&s.db, &f, "media", "largest", 0, 10).unwrap();
+    assert_eq!(media.total, 4); // a, b, g, v
+    assert_eq!(
+        media.items.iter().map(|i| i.size).collect::<Vec<_>>(),
+        [400, 200, 100, 50]
+    );
+    let page2 = cleanup_items(&s.db, &f, "media", "largest", 2, 2).unwrap();
+    assert_eq!(
+        page2.items.iter().map(|i| i.size).collect::<Vec<_>>(),
+        [100, 50]
+    );
+    let docs = cleanup_items(&s.db, &f, "docs", "largest", 0, 10).unwrap();
+    assert_eq!((docs.total, docs.items[0].kind.as_str()), (1, "pdf"));
+
+    // Bỏ tick v (video 400 B) → không bị dọn, nhưng vẫn hiện trong danh sách để tick lại
+    let v_id = s.item_id_of("video/group/123");
+    let kept = CleanupFilter {
+        exclude_ids: Some(vec![v_id]),
+        ..f
+    };
+    assert_eq!(
+        preview_cleanup(&s.db, &kept, 20).unwrap().bytes,
+        100 + 200 + 50 + 800
+    );
+    assert_eq!(
+        cleanup_items(&s.db, &kept, "media", "largest", 0, 10)
+            .unwrap()
+            .total,
+        4
+    );
+    let q = quarantine(&s.db, &kept, &s.opts()).unwrap();
+    assert_eq!(q.bytes, 100 + 200 + 50 + 800);
+    assert!(s.v.exists());
 }

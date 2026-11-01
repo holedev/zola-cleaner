@@ -285,7 +285,11 @@ pub fn unnoise_prefix(buf: &mut [u8], offset: usize) {
 /// hoặc tên stream của file Office đời cũ (OLE). `head` / `tail` là phần đầu / cuối file đã giải mã.
 pub fn refine_container(kind: &str, head: &[u8], tail: &[u8]) -> Option<&'static str> {
     let has = |hay: &[u8], needle: &[u8]| hay.windows(needle.len()).any(|w| w == needle);
-    let utf16 = |s: &str| s.encode_utf16().flat_map(u16::to_le_bytes).collect::<Vec<u8>>();
+    let utf16 = |s: &str| {
+        s.encode_utf16()
+            .flat_map(u16::to_le_bytes)
+            .collect::<Vec<u8>>()
+    };
     match kind {
         "zip" | "office" | "docx" | "xlsx" | "pptx" => {
             for (needle, k) in [(&b"word/"[..], "docx"), (b"xl/", "xlsx"), (b"ppt/", "pptx")] {
@@ -296,7 +300,11 @@ pub fn refine_container(kind: &str, head: &[u8], tail: &[u8]) -> Option<&'static
             None
         }
         "ole" => {
-            for (name, k) in [("WordDocument", "doc"), ("Workbook", "xls"), ("PowerPoint Document", "ppt")] {
+            for (name, k) in [
+                ("WordDocument", "doc"),
+                ("Workbook", "xls"),
+                ("PowerPoint Document", "ppt"),
+            ] {
                 let n = utf16(name);
                 if has(head, &n) || has(tail, &n) {
                     return Some(k);

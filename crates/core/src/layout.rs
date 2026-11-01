@@ -126,7 +126,10 @@ pub fn detect_accounts(app_data: &Path) -> Vec<AccountInfo> {
     uids.into_iter()
         .map(|uid| {
             let store = zalo.join("media").join(&uid).join("ZaloDownloads");
-            AccountInfo { store: store.is_dir().then_some(store), uid }
+            AccountInfo {
+                store: store.is_dir().then_some(store),
+                uid,
+            }
         })
         .collect()
 }

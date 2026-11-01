@@ -29,6 +29,9 @@ pub struct CleanupFilter {
     /// Chỉ Media Item có Message Time trước thời điểm này (epoch ms) — "từ mốc này trở về trước".
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub before_ts: Option<i64>,
+    /// Media Item người dùng bỏ tick trong màn xem trước — giữ lại, không dọn.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exclude_ids: Option<Vec<i64>>,
 }
 
 /// Tuổi của Media Item: Message Time nếu biết, nếu không thì mtime.
@@ -87,6 +90,10 @@ impl CleanupFilter {
         if let Some(days) = self.older_than_days.filter(|d| *d > 0) {
             parts.push(format!("{ITEM_TS} < ?"));
             params.push(Value::Integer(now_ms() - days * DAY_MS));
+        }
+        if let Some(ids) = self.exclude_ids.as_deref().filter(|x| !x.is_empty()) {
+            parts.push("i.id NOT IN (SELECT value FROM json_each(?))".to_owned());
+            params.push(Value::Text(serde_json::to_string(ids).unwrap_or_default()));
         }
         if let Some(before) = self.before_ts {
             parts.push(format!("{ITEM_TS} < ?"));

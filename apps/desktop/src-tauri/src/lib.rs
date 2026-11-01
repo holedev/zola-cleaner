@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use zc_core::db::{self, Root};
 use zc_core::filter::CleanupFilter;
 use zc_core::layout::{self, LayoutCheck};
-use zc_core::quarantine::{self, CleanupPreview, Job, JobOptions, JobResult};
+use zc_core::quarantine::{self, CleanupItems, CleanupPreview, Job, JobOptions, JobResult};
 use zc_core::scan::{ScanOptions, ScanProgress};
 use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
 use zc_core::suggest::{self, Suggestion};
@@ -333,6 +333,32 @@ async fn preview(state: AppStateRef<'_>, filter: CleanupFilter) -> CmdResult<Cle
     blocking(move || Ok(quarantine::preview_cleanup(&s.db()?, &filter, 20)?)).await
 }
 
+/// Một trang file sẽ bị dọn, để xem trước và bỏ tick.
+#[tauri::command]
+async fn cleanup_items(
+    state: AppStateRef<'_>,
+    filter: CleanupFilter,
+    group: String,
+    order: String,
+    offset: i64,
+    limit: i64,
+) -> CmdResult<CleanupItems> {
+    check_filter(&filter)?;
+    let s = state.inner().clone();
+    let limit = limit.clamp(1, 500);
+    blocking(move || {
+        Ok(quarantine::cleanup_items(
+            &s.db()?,
+            &filter,
+            &group,
+            &order,
+            offset.max(0),
+            limit,
+        )?)
+    })
+    .await
+}
+
 /// Chỉ dọn Media Store có Supported Layout.
 fn assert_supported(db: &db::Db, root_id: i64) -> CmdResult<()> {
     let root = db::get_root(db, root_id)?
@@ -512,7 +538,10 @@ fn init(paths: &Paths) -> zc_core::Result<Startup> {
     // Bản tạm của lần trước (file đang mở trong ứng dụng khác thì để lần sau)
     let _ = std::fs::remove_dir_all(&paths.open);
     let db = db::open_db(&paths.db)?;
-    let known: Vec<String> = db::list_roots(&db)?.into_iter().map(|r| r.path.to_lowercase()).collect();
+    let known: Vec<String> = db::list_roots(&db)?
+        .into_iter()
+        .map(|r| r.path.to_lowercase())
+        .collect();
     let first_run = known.is_empty();
     let mut new_accounts = Vec::new();
     if let Some(app_data) = std::env::var_os("APPDATA") {
@@ -533,7 +562,10 @@ fn init(paths: &Paths) -> zc_core::Result<Startup> {
             r.bytes
         );
     }
-    Ok(Startup { purged, new_accounts })
+    Ok(Startup {
+        purged,
+        new_accounts,
+    })
 }
 
 /// `thumb://<id>` → ảnh nhỏ cho bảng; `media://<id>` → ảnh lớn để xem.
@@ -636,6 +668,7 @@ pub fn run() {
             conversation_months,
             set_alias,
             preview,
+            cleanup_items,
             quarantine,
             jobs,
             restore,
