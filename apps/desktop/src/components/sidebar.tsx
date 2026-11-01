@@ -125,16 +125,7 @@ export function Sidebar({ tab, onTab, roots, rootId, onRoot, onScan }: Props) {
 
 const pct = (n: number, total: number) => `${Math.max(0, (n / Math.max(1, total)) * 100)}%`;
 
-/** Biểu tượng: một vạch quét để lộ ra phần trống — đúng việc app làm. */
+/** Biểu tượng app (cắt từ public/logo.png, xem app-icon.png). */
 function Mark() {
-  return (
-    <svg viewBox="0 0 32 32" className="size-8" aria-hidden>
-      <rect width="32" height="32" rx="9" fill="#16181d" />
-      <rect x="7" y="9" width="18" height="4" rx="2" fill="#3e5bd8" />
-      <rect x="7" y="15" width="11" height="4" rx="2" fill="#3e5bd8" />
-      <rect x="20" y="15" width="5" height="4" rx="2" fill="#0e7c70" />
-      <rect x="7" y="21" width="6" height="4" rx="2" fill="#3e5bd8" />
-      <rect x="15" y="21" width="10" height="4" rx="2" fill="#0e7c70" />
-    </svg>
-  );
+  return <img src="/logo-mark.png" alt="" className="size-9 rounded-[10px]" />;
 }
