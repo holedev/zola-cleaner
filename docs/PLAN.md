@@ -81,7 +81,6 @@ zalo-cleaner/
 │  ├─ safety.rs            # Zalo đang chạy, allowlist
 │  └─ report.rs            # Structure Report, xuất nhật ký đã lược
 ├─ apps/desktop            # Tauri v2: src-tauri (command, protocol thumb://) + src (React + shadcn/ui)
-└─ (cũ, xoá khi port xong) packages/core, apps/server, apps/web
 ```
 
 ### Lựa chọn công nghệ
@@ -191,13 +190,13 @@ Bản web Node (commit `3ea7fac`) đã xong: quét, Conversation, Preview, Quara
 ### Giai đoạn 3 — App desktop (`apps/desktop`)
 - [x] Command + protocol `thumb://`; UI shadcn: Gợi ý, Theo hội thoại (theo bộ lọc), Cách ly, loading / chặn thao tác
 - [x] File cài NSIS 3.7 MB
-- [ ] Biểu tượng app; thử cách ly → khôi phục → giải phóng bằng app desktop trên dữ liệu thật
+- [x] Biểu tượng app; thử cách ly → khôi phục → giải phóng bằng app desktop trên dữ liệu thật
 
 ### Giai đoạn 4 — Phát hành
-- [ ] Repo public mới (MIT, lịch sử làm sạch), CI build NSIS + updater, README người dùng cuối
+- [x] Repo public (MIT, lịch sử đã xoá ID thật), CI build NSIS + updater, README người dùng cuối
 
 ### Giai đoạn 5 — Gỡ code cũ và nâng cao
-- [ ] Xoá `packages/core`, `apps/server`, `apps/web`
+- [x] Xoá `packages/core`, `apps/server`, `apps/web`
 - [ ] Tìm trùng lặp; quy tắc lưu sẵn; thumbnail video
 
 ---
