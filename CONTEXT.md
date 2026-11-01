@@ -1,4 +1,4 @@
-# Zalo Cleaner
+# Zola Cleaner
 
 Dọn dữ liệu media mà Zalo PC tự tải về máy (ảnh, video, tài liệu nhận qua chat) để giải phóng ổ đĩa,
 chọn theo hội thoại và tuổi, an toàn và khôi phục được.

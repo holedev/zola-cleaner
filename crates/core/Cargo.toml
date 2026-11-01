@@ -1,6 +1,6 @@
 [package]
 name = "zalo-cleaner-core"
-description = "Lõi Zalo Cleaner: quét, nhận diện, cách ly / khôi phục media của Zalo PC"
+description = "Lõi Zola Cleaner: quét, nhận diện, cách ly / khôi phục media của Zalo PC"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

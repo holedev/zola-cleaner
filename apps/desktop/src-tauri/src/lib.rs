@@ -433,7 +433,7 @@ async fn export_log(app: AppHandle, path: String) -> CmdResult<()> {
         .map_err(|e| CmdError::new("internal", e.to_string()))?;
     blocking(move || {
         let home = std::env::var("USERPROFILE").unwrap_or_default();
-        let raw = std::fs::read_to_string(dir.join("zalo-cleaner.log")).unwrap_or_default();
+        let raw = std::fs::read_to_string(dir.join("zola-cleaner.log")).unwrap_or_default();
         let clean: Vec<String> = raw.lines().map(|l| sanitize_log(l, &home)).collect();
         std::fs::write(&path, clean.join("\n")).map_err(|e| CmdError::new("user", e.to_string()))
     })
@@ -449,10 +449,10 @@ fn app_paths() -> Paths {
     let local = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
         .unwrap_or_else(|| roaming.clone());
-    let data = roaming.join("zalo-cleaner");
+    let data = roaming.join("zola-cleaner");
     Paths {
-        db: data.join("zalo-cleaner.db"),
-        thumbs: local.join("zalo-cleaner").join("thumbs"),
+        db: data.join("zola-cleaner.db"),
+        thumbs: local.join("zola-cleaner").join("thumbs"),
         quarantine: quarantine::default_quarantine_base(&roaming),
     }
 }
@@ -526,7 +526,7 @@ pub fn run() {
             tauri_plugin_log::Builder::new()
                 .target(tauri_plugin_log::Target::new(
                     tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("zalo-cleaner".into()),
+                        file_name: Some("zola-cleaner".into()),
                     },
                 ))
                 .level(log::LevelFilter::Info)
@@ -568,7 +568,7 @@ pub fn run() {
             export_log,
         ])
         .run(tauri::generate_context!())
-        .expect("không khởi động được Zalo Cleaner");
+        .expect("không khởi động được Zola Cleaner");
 }
 
 #[cfg(test)]

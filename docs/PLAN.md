@@ -1,4 +1,4 @@
-# Zalo Cleaner — Kế hoạch dự án
+# Zola Cleaner — Kế hoạch dự án
 
 > App desktop Windows (Tauri + Rust) để **phân tích và dọn dẹp** dữ liệu media mà Zalo PC lưu trên máy:
 > ảnh, video, file đã nhận… vốn đã bị Zalo đổi tên thành chuỗi khó đọc và **không bị xoá theo** khi xoá hội thoại.

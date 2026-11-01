@@ -159,7 +159,7 @@ export default function App() {
   return (
     <main className="mx-auto grid max-w-7xl gap-5 px-6 py-5">
       <header className="flex flex-wrap items-center gap-4">
-        <h1 className="text-xl font-semibold tracking-tight">Zalo Cleaner</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Zola Cleaner</h1>
         {roots.data.length > 1 && (
           <Select value={String(rootId)} onValueChange={(v) => setRootId(Number(v))}>
             <SelectTrigger className="w-64">

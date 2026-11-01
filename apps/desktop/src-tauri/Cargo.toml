@@ -1,6 +1,6 @@
 [package]
 name = "zalo-cleaner-desktop"
-description = "Zalo Cleaner — app desktop (Tauri)"
+description = "Zola Cleaner — app desktop (Tauri)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

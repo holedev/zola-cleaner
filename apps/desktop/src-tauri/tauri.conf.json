@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Zalo Cleaner",
+  "productName": "Zola Cleaner",
   "version": "0.1.0",
-  "identifier": "io.github.zalo-cleaner",
+  "identifier": "io.github.zola-cleaner",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Zalo Cleaner",
+        "title": "Zola Cleaner",
         "width": 1240,
         "height": 820,
         "minWidth": 960,
@@ -36,7 +36,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "publisher": "Zalo Cleaner",
+    "publisher": "Zola Cleaner",
     "shortDescription": "Dọn ảnh, video, tài liệu Zalo PC tự tải về máy",
     "windows": {
       "nsis": {

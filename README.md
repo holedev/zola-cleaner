@@ -1,4 +1,4 @@
-# Zalo Cleaner
+# Zola Cleaner
 
 Web app chạy local để **dọn ảnh, video, tài liệu** mà Zalo PC tự tải về máy (`%APPDATA%\ZaloData\media\<uid>\ZaloDownloads`), **chọn theo hội thoại** và tuổi.
 

@@ -29,7 +29,7 @@ export function OverviewPage({ rootId }: { rootId: number }) {
   };
 
   const exportReport = async (r: RootInfo) => {
-    const path = await save({ title: "Lưu báo cáo cấu trúc", defaultPath: "zalo-cleaner-bao-cao.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    const path = await save({ title: "Lưu báo cáo cấu trúc", defaultPath: "zola-cleaner-bao-cao.json", filters: [{ name: "JSON", extensions: ["json"] }] });
     if (!path) return;
     try {
       await blocking.run("Đang lập báo cáo cấu trúc…", () => api.exportReport(r.id, path));
@@ -40,7 +40,7 @@ export function OverviewPage({ rootId }: { rootId: number }) {
   };
 
   const exportLog = async () => {
-    const path = await save({ title: "Lưu nhật ký", defaultPath: "zalo-cleaner-nhat-ky.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
+    const path = await save({ title: "Lưu nhật ký", defaultPath: "zola-cleaner-nhat-ky.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
     if (!path) return;
     try {
       await api.exportLog(path);
@@ -101,6 +101,10 @@ export function OverviewPage({ rootId }: { rootId: number }) {
           </p>
         </CardContent>
       </Card>
+
+      <p className="text-muted-foreground text-center text-xs">
+        Zola Cleaner là phần mềm mã nguồn mở độc lập, không liên kết với Zalo hay VNG.
+      </p>
     </div>
   );
 }

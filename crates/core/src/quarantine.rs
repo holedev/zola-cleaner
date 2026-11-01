@@ -99,9 +99,9 @@ struct StoredLink {
     conv_id: Option<String>,
 }
 
-/// `%APPDATA%\zalo-cleaner\quarantine` — cùng ổ với ZaloData, nằm ngoài ZaloData.
+/// `%APPDATA%\zola-cleaner\quarantine` — cùng ổ với ZaloData, nằm ngoài ZaloData.
 pub fn default_quarantine_base(app_data: &Path) -> PathBuf {
-    app_data.join("zalo-cleaner").join("quarantine")
+    app_data.join("zola-cleaner").join("quarantine")
 }
 
 fn abs_of(root: &Path, rel_path: &str) -> PathBuf {
