@@ -13,7 +13,7 @@ use zc_core::filter::CleanupFilter;
 use zc_core::layout::{self, LayoutCheck};
 use zc_core::quarantine::{self, CleanupPreview, Job, JobOptions, JobResult};
 use zc_core::scan::{ScanOptions, ScanProgress};
-use zc_core::stats::{self, ConversationSummary, Stats};
+use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
 use zc_core::suggest::{self, Suggestion};
 use zc_core::{Error, report, safety, thumbs};
 
@@ -270,6 +270,19 @@ async fn conversations(
     check_filter(&filter)?;
     let s = state.inner().clone();
     blocking(move || Ok(stats::list_conversations(&s.db()?, &filter, 6)?)).await
+}
+
+#[tauri::command]
+async fn conversation_months(
+    state: AppStateRef<'_>,
+    filter: CleanupFilter,
+) -> CmdResult<ConversationMonths> {
+    check_filter(&filter)?;
+    if filter.conv_ids.as_ref().is_none_or(|c| c.len() != 1) {
+        return Err(CmdError::new("user", "Chọn đúng một hội thoại"));
+    }
+    let s = state.inner().clone();
+    blocking(move || Ok(stats::conversation_months(&s.db()?, &filter, 4)?)).await
 }
 
 #[tauri::command]
@@ -558,6 +571,7 @@ pub fn run() {
             stats,
             suggestions,
             conversations,
+            conversation_months,
             set_alias,
             preview,
             quarantine,

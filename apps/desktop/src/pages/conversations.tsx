@@ -1,7 +1,8 @@
-import { Search } from "lucide-react";
+import { CalendarRange, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { CleanupRequest } from "@/components/cleanup-dialog";
+import { ConversationMonthsDialog } from "@/components/conversation-months";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,6 +49,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [allConvs, setAllConvs] = useState(false);
   const [query, setQuery] = useState("");
+  const [monthsFor, setMonthsFor] = useState<Conversation | null>(null);
 
   const rawBase: CleanupFilter = useMemo(() => {
     const mb = Number(minSizeMb);
@@ -202,13 +204,14 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
                 <Legend />
               </TableHead>
               <TableHead className="text-right">Mới nhất</TableHead>
+              <TableHead />
             </TableRow>
           </TableHeader>
           <TableBody>
             {convs.isPending
               ? Array.from({ length: 8 }, (_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={7}>
+                    <TableCell colSpan={8}>
                       <Skeleton className="h-12 w-full" />
                     </TableCell>
                   </TableRow>
@@ -222,11 +225,14 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
                     checked={allConvs || selected.has(c.convId)}
                     disabled={allConvs}
                     onToggle={() => toggle(c.convId)}
+                    onMonths={readOnly ? undefined : () => setMonthsFor(c)}
                   />
                 ))}
           </TableBody>
         </Table>
       </div>
+
+      <ConversationMonthsDialog conv={monthsFor} base={base} onClose={() => setMonthsFor(null)} onCleanup={onCleanup} />
 
       <footer className="bg-background/95 fixed inset-x-0 bottom-0 z-10 border-t backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
@@ -290,6 +296,7 @@ function Row({
   checked,
   disabled,
   onToggle,
+  onMonths,
 }: {
   rootId: number;
   conv: Conversation;
@@ -297,6 +304,8 @@ function Row({
   checked: boolean;
   disabled: boolean;
   onToggle: () => void;
+  /** Mở hộp thoại dọn hội thoại này theo tháng. */
+  onMonths?: () => void;
 }) {
   const [alias, setAlias] = useState(c.alias ?? "");
   useEffect(() => setAlias(c.alias ?? ""), [c.alias]);
@@ -359,6 +368,13 @@ function Row({
         </div>
       </TableCell>
       <TableCell className="text-muted-foreground text-right">{formatDate(c.lastTs)}</TableCell>
+      <TableCell className="text-right">
+        {onMonths && (
+          <Button variant="ghost" size="sm" onClick={onMonths} title="Chọn một tháng, dọn từ tháng đó trở về trước">
+            <CalendarRange /> Theo tháng
+          </Button>
+        )}
+      </TableCell>
     </TableRow>
   );
 }

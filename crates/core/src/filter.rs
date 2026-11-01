@@ -26,6 +26,9 @@ pub struct CleanupFilter {
     /// Chỉ Media Item lớn hơn hoặc bằng N byte.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_size: Option<i64>,
+    /// Chỉ Media Item có Message Time trước thời điểm này (epoch ms) — "từ mốc này trở về trước".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_ts: Option<i64>,
 }
 
 /// Tuổi của Media Item: Message Time nếu biết, nếu không thì mtime.
@@ -84,6 +87,10 @@ impl CleanupFilter {
         if let Some(days) = self.older_than_days.filter(|d| *d > 0) {
             parts.push(format!("{ITEM_TS} < ?"));
             params.push(Value::Integer(now_ms() - days * DAY_MS));
+        }
+        if let Some(before) = self.before_ts {
+            parts.push(format!("{ITEM_TS} < ?"));
+            params.push(Value::Integer(before));
         }
         if let Some(min) = self.min_size.filter(|m| *m > 0) {
             parts.push("i.size >= ?".to_owned());

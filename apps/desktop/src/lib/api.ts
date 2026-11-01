@@ -54,6 +54,23 @@ export interface CleanupFilter {
   categories?: string[];
   olderThanDays?: number;
   minSize?: number;
+  /** Chỉ Media Item có thời điểm tin nhắn trước mốc này (epoch ms). */
+  beforeTs?: number;
+}
+
+export interface MonthBucket {
+  /** "YYYY-MM" theo giờ máy. */
+  month: string;
+  startMs: number;
+  count: number;
+  bytes: number;
+  thumbIds: number[];
+}
+
+export interface ConversationMonths {
+  /** Mới nhất trước; chỉ gồm file dọn được (không tính file dùng chung). */
+  months: MonthBucket[];
+  shared: Bucket;
 }
 
 export interface Conversation {
@@ -132,6 +149,7 @@ export const api = {
   stats: (rootId: number) => call<Stats>("stats", { rootId }),
   suggestions: (rootId: number) => call<Suggestion[]>("suggestions", { rootId }),
   conversations: (filter: CleanupFilter) => call<Conversation[]>("conversations", { filter }),
+  conversationMonths: (filter: CleanupFilter) => call<ConversationMonths>("conversation_months", { filter }),
   setAlias: (rootId: number, convId: string, alias: string | null) =>
     call<void>("set_alias", { rootId, convId, alias }),
   preview: (filter: CleanupFilter) => call<CleanupPreview>("preview", { filter }),

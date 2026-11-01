@@ -32,6 +32,13 @@ export const useConversations = (filter: CleanupFilter) =>
     placeholderData: keepPreviousData,
   });
 
+export const useConversationMonths = (filter: CleanupFilter | null) =>
+  useQuery({
+    queryKey: ["index", "months", filter] as const,
+    queryFn: () => api.conversationMonths(filter!),
+    enabled: filter != null,
+  });
+
 export const usePreview = (filter: CleanupFilter | null) =>
   useQuery({
     queryKey: keys.preview(filter ?? { rootId: -1 }),

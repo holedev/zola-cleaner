@@ -81,6 +81,7 @@ pub fn suggestions(db: &Db, root_id: i64) -> Result<Vec<Suggestion>> {
                 categories: Some(d.categories.iter().map(|c| (*c).to_owned()).collect()),
                 older_than_days: d.older_than_days,
                 min_size: d.min_size,
+                before_ts: None,
             };
             let p = preview_cleanup(db, &filter, 0)?;
             Ok(Suggestion {

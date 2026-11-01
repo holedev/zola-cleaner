@@ -494,3 +494,40 @@ fn purge_khong_dung_toi_thu_muc_cach_ly_cua_job_khac_trung_so() {
     purge_job(&s.db, q.job_id).unwrap();
     assert!(old.join("keep.jpg").exists());
 }
+
+#[test]
+fn don_mot_hoi_thoai_tu_mot_thang_tro_ve_truoc() {
+    use zc_core::stats::conversation_months;
+    let s = setup();
+    let f = s.filter(&["111"]); // mặc định ảnh + video
+    let m = conversation_months(&s.db, &f, 4).unwrap();
+    assert_eq!(m.months.len(), 1);
+    let sept = &m.months[0];
+    assert_eq!(sept.month, "2020-09");
+    assert_eq!((sept.count, sept.bytes), (1, 100)); // chỉ a; b dùng chung với g222
+    assert_eq!(sept.thumb_ids.len(), 1);
+    assert_eq!((m.shared.count, m.shared.bytes), (1, 200));
+
+    // "Từ tháng 9/2020 trở về trước" = trước đầu tháng 10/2020
+    let next_month = sept.start_ms + 31 * 86_400_000;
+    let p = preview_cleanup(
+        &s.db,
+        &CleanupFilter {
+            before_ts: Some(next_month),
+            ..f.clone()
+        },
+        20,
+    )
+    .unwrap();
+    assert_eq!(p.bytes, 100);
+    let p = preview_cleanup(
+        &s.db,
+        &CleanupFilter {
+            before_ts: Some(sept.start_ms),
+            ..f
+        },
+        20,
+    )
+    .unwrap();
+    assert_eq!(p.count, 0);
+}

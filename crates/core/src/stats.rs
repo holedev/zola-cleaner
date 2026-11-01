@@ -289,6 +289,105 @@ pub(crate) fn renumber(sql: &str, start: usize) -> String {
     out
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonthBucket {
+    /// "YYYY-MM" theo giờ máy.
+    pub month: String,
+    /// Đầu tháng (00:00 ngày 1, giờ máy), epoch ms — dùng làm `before_ts` khi dọn "tháng này trở về trước".
+    pub start_ms: i64,
+    pub count: i64,
+    pub bytes: i64,
+    pub thumb_ids: Vec<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationMonths {
+    /// Mới nhất trước. Chỉ gồm Media Item dọn được (không tính Shared Media Item).
+    pub months: Vec<MonthBucket>,
+    /// Shared Media Item của hội thoại — luôn được giữ khi chỉ dọn hội thoại này.
+    pub shared: Bucket,
+}
+
+/// Media Item dọn được của MỘT Conversation, theo tháng (Message Time). `filter.conv_ids` phải có đúng hội thoại đó;
+/// `older_than_days` / `before_ts` bị bỏ qua — người dùng chọn mốc từ chính danh sách tháng.
+pub fn conversation_months(
+    db: &Db,
+    filter: &CleanupFilter,
+    thumbs: usize,
+) -> Result<ConversationMonths> {
+    let f = CleanupFilter {
+        older_than_days: None,
+        before_ts: None,
+        ..filter.clone()
+    };
+    let w = f.candidate_where();
+    let s = f.shared_cond();
+    let sql = format!(
+        "SELECT i.id, i.size, i.kind, i.category, {ITEM_TS} AS ts,
+           strftime('%Y-%m', {ITEM_TS} / 1000, 'unixepoch', 'localtime'),
+           CAST(strftime('%s', date({ITEM_TS} / 1000, 'unixepoch', 'localtime', 'start of month'), 'utc') AS INTEGER) * 1000,
+           ({}) AS shared
+         FROM items i WHERE {}",
+        s.sql, w.sql
+    );
+    let params: Vec<Value> = s.params.into_iter().chain(w.params).collect();
+    let mut q = db.prepare(&sql)?;
+    let mut rows = q.query(params_from_iter(params))?;
+
+    let mut months: std::collections::BTreeMap<String, (MonthBucket, Vec<(bool, i64, i64)>)> =
+        Default::default();
+    let mut shared = Bucket {
+        key: "shared".into(),
+        count: 0,
+        bytes: 0,
+    };
+    while let Some(r) = rows.next()? {
+        let (id, size): (i64, i64) = (r.get(0)?, r.get(1)?);
+        if r.get::<_, i64>(7)? != 0 {
+            shared.count += 1;
+            shared.bytes += size;
+            continue;
+        }
+        let (kind, category, ts): (String, String, i64) = (r.get(2)?, r.get(3)?, r.get(4)?);
+        let month: String = r.get(5)?;
+        let start_ms: i64 = r.get(6)?;
+        let (b, pool) = months.entry(month.clone()).or_insert_with(|| {
+            (
+                MonthBucket {
+                    month,
+                    start_ms,
+                    count: 0,
+                    bytes: 0,
+                    thumb_ids: Vec::new(),
+                },
+                Vec::new(),
+            )
+        });
+        b.count += 1;
+        b.bytes += size;
+        if category == "image" {
+            pool.push((
+                matches!(kind.as_str(), "jpg" | "png" | "gif" | "webp"),
+                ts,
+                id,
+            ));
+        }
+    }
+
+    let months = months
+        .into_values()
+        .rev()
+        .map(|(mut b, mut pool)| {
+            pool.sort_unstable_by(|a, b| b.cmp(a));
+            b.thumb_ids = pool.into_iter().take(thumbs).map(|(_, _, id)| id).collect();
+            b
+        })
+        .collect();
+    Ok(ConversationMonths { months, shared })
+}
+
 /// Đặt (hoặc xoá, nếu rỗng) Alias của một Conversation.
 pub fn set_alias(db: &Db, root_id: i64, conv_id: &str, alias: Option<&str>) -> Result<()> {
     let value = alias.map(str::trim).filter(|a| !a.is_empty());
