@@ -5,77 +5,79 @@
 <h1 align="center">Zola Cleaner</h1>
 
 <p align="center">
-  Dọn ảnh, video, tài liệu mà <b>Zalo PC</b> tự tải về máy — chọn theo hội thoại và thời gian, xem trước từng file, khôi phục được.
+  Clean up the photos, videos and documents that <b>Zalo PC</b> downloads to your computer: pick by conversation and age, preview every file, restore anytime.
   <br />
-  <sub>Desktop app (Windows) that frees disk space taken by media Zalo PC downloads. Vietnamese UI.</sub>
+  <b>English</b> · <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
 ---
 
-Zalo PC lưu mọi ảnh, video, tài liệu nhận qua chat vào ổ C, thường lên tới hàng chục GB. Zalo không có cách dọn theo hội thoại hay theo thời gian, nên ổ đĩa cứ đầy dần.
+Zalo PC saves every photo, video and document you receive in chats to drive C, often tens of gigabytes. Zalo has no way to clean up by conversation or by age, so the drive keeps filling up.
 
-Zola Cleaner cho bạn thấy Zalo đang giữ bao nhiêu, ở hội thoại nào, và dọn đúng phần bạn chọn.
+Zola Cleaner shows how much space Zalo is using and which conversations use it. Then it cleans only the part you choose.
 
-## Tính năng
+> The app's interface is in Vietnamese, since Zalo is used mostly in Vietnam.
 
-- **Dọn nhanh**: một câu cho biết Zalo đang chiếm bao nhiêu và dọn được bao nhiêu, ví dụ "Ảnh & video cũ hơn 1 năm → lấy lại 4,4 GB".
-- **Theo hội thoại**: chọn từng hội thoại hoặc nhóm, lọc theo loại (ảnh, video, tài liệu, file nén…), theo tuổi, theo kích thước, theo định dạng (ZIP, RAR, PDF…), hoặc "từ tháng này trở về trước".
-- **Xem trước từng file**: ảnh hiện thành lưới, tài liệu kèm tên thật. Bỏ tick file nào thì file đó được giữ lại.
-- **Thùng rác riêng**: file đã dọn được giữ 7 ngày và khôi phục đúng chỗ cũ. Có thể nén ZIP để cất lên Drive / USB rồi nhập lại sau.
-- **An toàn với cách Zalo lưu file**: một file có thể nằm ở nhiều hội thoại (hardlink). App không đếm trùng và không dọn file còn dùng ở hội thoại bạn không chọn.
-- Nhận ra dữ liệu Zalo đã chuyển sang ổ khác, và hỗ trợ nhiều tài khoản Zalo trên cùng máy.
+## Features
 
-## Cài đặt
+- **Quick clean**: one sentence tells you how much Zalo takes and how much you can get back, e.g. "Photos & videos older than 1 year → reclaim 4.4 GB".
+- **By conversation**: pick individual chats or groups. Filter by kind (photos, videos, documents, archives…), age, size or file format (ZIP, RAR, PDF…), or use "this month and earlier".
+- **Preview every file**: photos show as a grid and documents show their real names. Untick a file to keep it.
+- **Its own trash**: cleaned files stay for 7 days and can be restored to their original places. You can also pack them into a ZIP for Drive or USB and import it back later.
+- **Safe with how Zalo stores files**: one file can appear in several conversations as hardlinks. The app does not count it twice. It also does not remove a file that a conversation you didn't select still uses.
+- Detects Zalo data moved to another drive, and supports several Zalo accounts on the same computer.
 
-1. Tải file `Zola.Cleaner_x.y.z_x64-setup.exe` ở trang [**Releases**](../../releases/latest).
-2. Mở file cài. Cài theo người dùng hiện tại, không cần quyền quản trị.
-3. App **chưa được ký số**, nên Windows có thể hiện "Windows protected your PC". Bấm **More info → Run anyway**.
+## Install
 
-App tự báo khi có bản mới. Bấm **Cập nhật** là tải và cài.
+1. Download `Zola.Cleaner_x.y.z_x64-setup.exe` from the [**Releases**](../../releases/latest) page.
+2. Run the installer. It installs for the current user and doesn't need admin rights.
+3. The app is **not code-signed yet**, so Windows may show "Windows protected your PC". Click **More info → Run anyway**.
 
-> Yêu cầu: Windows 10/11 64-bit, Zalo PC bản mới (đã chuyển sang cách lưu media mới của Zalo 5.x).
-> Nếu cấu trúc thư mục Zalo trên máy bạn khác với cấu trúc app đã kiểm chứng, app chỉ cho **xem**, không dọn.
+The app tells you when a new version is out. Click **Cập nhật** (Update) to download and install it.
 
-## Dùng thế nào cho an toàn
+> Requirements: Windows 10/11 64-bit and a recent Zalo PC (one that uses the new Zalo 5.x media layout).
+> If the Zalo folder layout on your computer differs from the one the app has verified, the app only lets you **view**, not clean.
 
-- **Thoát hẳn Zalo trước khi dọn**: chuột phải biểu tượng Zalo ở khay hệ thống → Thoát. App sẽ nhắc nếu Zalo còn chạy.
-- Ảnh và video đã dọn: Zalo thường tải lại được khi bạn mở hội thoại, nếu file còn trên máy chủ Zalo.
-- **Tài liệu không bao giờ được chọn sẵn**. Không có zCloud thì file chỉ nằm trên máy chủ Zalo một số ngày. Tài liệu đã dọn có thể không tải lại được nữa.
-- Không dùng zCloud? Bật **Cài đặt → Tin nhắn → Cài đặt khác → Tự động tải trước Ảnh/File/Video/Tin nhắn thoại dưới 30MB** trong Zalo PC để file về máy trước khi hết hạn.
-- Ổ đĩa chỉ thật sự trống ra khi bạn **Dọn sạch thùng rác**, hoặc sau 7 ngày.
+## Using it safely
 
-## Quyền riêng tư
+- **Quit Zalo completely before cleaning**: right-click the Zalo icon in the system tray → Quit (Thoát). The app reminds you if Zalo is still running.
+- Cleaned photos and videos: Zalo can usually download them again when you open the chat, as long as the file is still on Zalo's servers.
+- **Documents are never pre-selected.** Without zCloud, files stay on Zalo's servers for only a limited number of days. A cleaned document may be impossible to download again.
+- Not using zCloud? In Zalo PC, turn on **Settings → Messages → Other settings → Auto-download photos/files/videos/voice messages under 30MB** so files reach your computer before they expire.
+- Disk space is only actually freed when you **empty the trash** (Dọn sạch thùng rác), or after 7 days.
 
-- App chỉ đọc thư mục media của Zalo (`ZaloDownloads`). App **không đọc tin nhắn**, không đọc CSDL của Zalo, và không điều khiển Zalo.
-- Không có telemetry. Kết nối mạng duy nhất là hỏi GitHub xem có bản mới không.
-- Nhật ký và báo cáo cấu trúc chỉ được lưu vào file bạn chọn, và đã lược bỏ ID tài khoản, ID hội thoại.
+## Privacy
 
-## Phát triển
+- The app only reads Zalo's media folder (`ZaloDownloads`). It **does not read your messages** or Zalo's database, and it does not control Zalo.
+- No telemetry. The only network connection is asking GitHub whether a new version exists.
+- Logs and structure reports are saved only to a file you choose, with account and conversation IDs removed.
 
-Cần: Windows, [Rust](https://rustup.rs) ≥ 1.95 (MSVC, kèm Visual Studio Build Tools), Node.js ≥ 22, pnpm 10 (`corepack enable`).
+## Development
+
+Requirements: Windows, [Rust](https://rustup.rs) ≥ 1.95 (MSVC, with Visual Studio Build Tools), Node.js ≥ 22, pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install
-pnpm dev                     # chạy app ở chế độ dev (Tauri + Vite)
-cargo test --workspace       # test lõi trên Media Store giả có hardlink thật
+pnpm dev                     # run the app in dev mode (Tauri + Vite)
+cargo test --workspace       # core tests on a fake Media Store with real hardlinks
 cargo clippy --workspace --all-targets
 pnpm typecheck
-pnpm build                   # file cài NSIS trong target/release/bundle/nsis
+pnpm build                   # NSIS installer in target/release/bundle/nsis
 ```
 
 ```
-crates/core      Lõi Rust: nhận diện layout Zalo, quét, phân loại, thống kê, thùng rác, ZIP, tên tài liệu
-apps/desktop     App Tauri v2: src-tauri (command IPC) + src (React, Tailwind, shadcn/ui)
-docs/            Kế hoạch, cấu trúc dữ liệu Zalo, ADR
-CONTEXT.md       Thuật ngữ dùng trong code và giao diện
+crates/core      Rust core: Zalo layout detection, scanning, classification, stats, trash, ZIP, document names
+apps/desktop     Tauri v2 app: src-tauri (IPC commands) + src (React, Tailwind, shadcn/ui)
+docs/            Plan, Zalo data layout, ADRs (in Vietnamese)
+CONTEXT.md       Glossary used in code and UI (in Vietnamese)
 ```
 
-Nên đọc trước: [`CONTEXT.md`](CONTEXT.md) (thuật ngữ), [`docs/zalo-layout.md`](docs/zalo-layout.md) (Zalo lưu file thế nào), [`docs/adr/`](docs/adr) (các quyết định lớn).
+Read first: [`CONTEXT.md`](CONTEXT.md) (glossary), [`docs/zalo-layout.md`](docs/zalo-layout.md) (how Zalo stores files), [`docs/adr/`](docs/adr) (major decisions).
 
-Phát hành: tăng `version` trong `apps/desktop/src-tauri/tauri.conf.json`, rồi đẩy tag `vX.Y.Z`. GitHub Actions build file cài, ký bản cập nhật và tạo bản nháp Release.
+Releasing: bump `version` in `apps/desktop/src-tauri/tauri.conf.json`, then push a `vX.Y.Z` tag. GitHub Actions builds the installer, signs the update and creates a draft release.
 
-Khi viết test hoặc tài liệu, đừng dùng uid hay ID hội thoại Zalo thật. Hãy dùng số giả.
+When writing tests or docs, never use real Zalo uids or conversation IDs. Use fake numbers.
 
-## Giấy phép
+## License
 
-[MIT](LICENSE). Zola Cleaner là dự án độc lập, **không liên kết với Zalo hay VNG**. "Zalo" là nhãn hiệu của chủ sở hữu tương ứng.
+[MIT](LICENSE). Zola Cleaner is an independent project, **not affiliated with Zalo or VNG**. "Zalo" is a trademark of its respective owner.
