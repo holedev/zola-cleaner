@@ -65,7 +65,7 @@ export function Sidebar({ tab, onTab, roots, rootId, onRoot, onScan }: Props) {
             </SelectContent>
           </Select>
         ) : (
-          <div className="truncate text-sm font-medium" title="Đặt tên tài khoản ở mục Tổng quan">
+          <div className="truncate text-sm font-medium" title="Đặt tên tài khoản ở Cài đặt">
             {root ? accountName(root) : "—"}
           </div>
         )}

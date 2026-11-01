@@ -42,8 +42,8 @@ const TAB_HINT: Record<Tab, string> = {
   suggestions: "",
   conversations: "Chọn hội thoại và khoảng thời gian cần dọn. Số liệu đổi ngay theo bộ lọc.",
   jobs: "File đã dọn nằm ở đây 7 ngày. Khôi phục nếu thiếu, dọn sạch để lấy lại dung lượng.",
-  overview: "Dữ liệu Zalo trên máy, theo loại, tuổi và thư mục. Tài khoản và đường dẫn.",
-  settings: "Nơi lưu thùng rác và bản sao lưu.",
+  overview: "Dữ liệu Zalo trên máy, theo loại, tuổi và thư mục của Zalo.",
+  settings: "Tài khoản và mọi đường dẫn: dữ liệu Zalo, thùng rác, bản sao lưu.",
 };
 
 export default function App() {
@@ -166,9 +166,9 @@ export default function App() {
       <main className="mx-auto grid max-w-xl gap-4 p-10">
         <h1 className="text-2xl font-semibold">Không tìm thấy dữ liệu Zalo</h1>
         <p className="text-muted-foreground">
-          App tìm trong %APPDATA%\ZaloData\media. Nếu bạn cài Zalo ở chỗ khác, thêm thư mục ZaloDownloads ở tab Tổng quan.
+          App đã tìm ở vị trí mặc định và trên mọi ổ đĩa. Nếu dữ liệu Zalo nằm ở chỗ khác, bấm "Thêm thư mục dữ liệu Zalo…".
         </p>
-        <OverviewPage rootId={-1} />
+        <SettingsPage />
       </main>
     );
   }
@@ -201,7 +201,7 @@ export default function App() {
           <Eye />
           <AlertTitle>Chế độ chỉ xem</AlertTitle>
           <AlertDescription>
-            Cấu trúc thư mục Zalo trên máy này chưa được kiểm chứng, nên app không dọn để tránh xoá nhầm. Vào Tổng quan, bấm
+            Cấu trúc thư mục Zalo trên máy này chưa được kiểm chứng, nên app không dọn để tránh xoá nhầm. Vào Cài đặt, bấm
             "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển để được hỗ trợ.
           </AlertDescription>
         </Alert>

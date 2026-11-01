@@ -1,135 +1,349 @@
-/** Cài đặt: nơi lưu thùng rác (từng tài khoản) và thư mục mặc định cho bản sao lưu ZIP. */
-import { open } from "@tauri-apps/plugin-dialog";
+/**
+ * Cài đặt: mọi đường dẫn ở một chỗ.
+ * - Từng tài khoản: tên, thư mục dữ liệu Zalo, thùng rác.
+ * - Chung: thư mục lưu bản sao lưu ZIP, thêm thư mục dữ liệu, nhật ký.
+ */
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, FileArchive, FolderOpen, RotateCcw, Zap } from "lucide-react";
+import {
+  Archive,
+  CircleCheck,
+  FileArchive,
+  FileDown,
+  FolderInput,
+  FolderOpen,
+  FolderPlus,
+  FolderX,
+  HardDrive,
+  RotateCcw,
+  ScrollText,
+  TriangleAlert,
+  Zap,
+} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useBlocking } from "@/components/blocking";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { accountName, api, errorMessage, formatBytes, type TrashSetting } from "@/lib/api";
-import { useRoots } from "@/lib/queries";
+import { accountName, api, errorMessage, formatBytes, type RootInfo, shortUid, type TrashSetting } from "@/lib/api";
+import { keys, useRoots } from "@/lib/queries";
+
+/** Gợi ý chung khi chọn thư mục dữ liệu Zalo. */
+const DATA_PICK_HINT = '(ZaloData, "Zalo Data", media hoặc ZaloDownloads)';
 
 export function SettingsPage() {
   const qc = useQueryClient();
-  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const blocking = useBlocking();
   const roots = useRoots();
-  const refresh = () => qc.invalidateQueries({ queryKey: ["settings"] });
+  const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: api.accounts });
+  /** Tài khoản đã đăng nhập trên máy nhưng Zalo chưa tạo thư mục media (chưa có gì để dọn). */
+  const noMedia = (accounts.data ?? []).filter((a) => !a.store);
+  const s = settings.data;
 
-  const run = async (fn: () => Promise<void>, ok: string) => {
+  const refreshAll = async () => {
+    await qc.invalidateQueries({ queryKey: ["settings"] });
+    await qc.invalidateQueries({ queryKey: keys.roots });
+    await qc.invalidateQueries({ queryKey: ["index"] });
+  };
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
     try {
       await fn();
-      await refresh();
-      await qc.invalidateQueries({ queryKey: ["index"] });
+      await refreshAll();
       toast.success(ok);
     } catch (e) {
       toast.error(errorMessage(e));
     }
   };
 
-  const pickTrash = async (t: TrashSetting) => {
-    const dir = await open({ directory: true, title: "Chọn thư mục làm thùng rác", defaultPath: t.dir });
-    if (typeof dir === "string") await run(() => api.setTrashDir(t.rootId, dir), "Đã đổi nơi lưu thùng rác");
+  const addRoot = async () => {
+    const dir = await open({ directory: true, title: `Chọn thư mục dữ liệu Zalo ${DATA_PICK_HINT}` });
+    if (typeof dir === "string") await run(() => api.addRoot(dir), "Đã thêm thư mục dữ liệu Zalo");
   };
 
   const pickBackup = async () => {
-    const dir = await open({ directory: true, title: "Chọn thư mục lưu bản sao lưu ZIP", defaultPath: settings.data?.backupDir });
+    const dir = await open({ directory: true, title: "Chọn thư mục lưu bản sao lưu ZIP", defaultPath: s?.backupDir });
     if (typeof dir === "string") await run(() => api.setBackupDir(dir), "Đã đổi thư mục sao lưu");
   };
 
-  const s = settings.data;
+  const exportLog = async () => {
+    const path = await save({ title: "Lưu nhật ký", defaultPath: "zola-cleaner-nhat-ky.txt", filters: [{ name: "Text", extensions: ["txt"] }] });
+    if (!path) return;
+    try {
+      await api.exportLog(path);
+      toast.success("Đã lưu nhật ký (đã lược đường dẫn và ID).");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const exportReport = async (r: RootInfo) => {
+    const path = await save({ title: "Lưu báo cáo cấu trúc", defaultPath: "zola-cleaner-bao-cao.json", filters: [{ name: "JSON", extensions: ["json"] }] });
+    if (!path) return;
+    try {
+      await blocking.run("Đang lập báo cáo cấu trúc…", () => api.exportReport(r.id, path));
+      toast.success("Đã lưu báo cáo. Báo cáo không chứa tên file, ID hay nội dung — bạn có thể gửi cho nhà phát triển.");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
   return (
-    <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Archive className="size-5" /> Nơi lưu thùng rác
-          </CardTitle>
-          <CardDescription>
-            Mặc định thùng rác nằm cùng ổ với dữ liệu Zalo nên chuyển vào thùng rác là tức thì. Chọn thư mục ở ổ khác thì app sẽ
-            chép file sang rồi xoá bản gốc: chậm hơn với nhiều GB, nhưng ổ chứa Zalo trống ra ngay. Thay đổi chỉ áp dụng cho lần
-            dọn sau — file đang trong thùng rác vẫn ở chỗ cũ và khôi phục bình thường.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          {!s
-            ? Array.from({ length: 1 }, (_, i) => <Skeleton key={i} className="h-16" />)
-            : s.trash.map((t) => {
-                const root = roots.data?.find((r) => r.id === t.rootId);
-                return (
-                  <div key={t.rootId} className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-                    <span className="w-44 font-medium">{root ? accountName(root) : `Tài khoản #${t.rootId}`}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-mono text-xs" title={t.dir}>
-                        {t.dir}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
-                        <Badge variant={t.isDefault ? "secondary" : "outline"}>{t.isDefault ? "Mặc định" : "Tự chọn"}</Badge>
-                        {t.sameDrive ? (
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Zap className="size-3" /> Cùng ổ với dữ liệu Zalo — chuyển tức thì
-                          </span>
-                        ) : (
-                          <span className="text-amber-700 dark:text-amber-400">
-                            Khác ổ với dữ liệu Zalo — chép sang (chậm hơn), ổ Zalo trống ngay
-                          </span>
-                        )}
-                        {t.free != null && <span className="text-muted-foreground">· Ổ này còn trống {formatBytes(t.free)}</span>}
-                      </div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => pickTrash(t)}>
+    <div className="grid max-w-5xl gap-8">
+      <section className="grid gap-3">
+        <SectionTitle
+          title={`Tài khoản Zalo trên máy (${(accounts.data?.length ?? roots.data?.length ?? 0).toLocaleString("vi-VN")})`}
+          hint="App tự tìm dữ liệu Zalo ở vị trí mặc định và trên mọi ổ đĩa. Nếu bạn tự di chuyển thư mục bằng tay, bấm Đổi đường dẫn ở tài khoản đó."
+        />
+        {!roots.data || !s
+          ? <Skeleton className="h-48 rounded-xl" />
+          : roots.data.map((r) => (
+              <AccountCard
+                key={r.id}
+                root={r}
+                trash={s.trash.find((t) => t.rootId === r.id)}
+                onChangePath={async () => {
+                  const dir = await open({ directory: true, title: `Chọn vị trí mới cho ${accountName(r)} ${DATA_PICK_HINT}` });
+                  if (typeof dir !== "string") return;
+                  await run(async () => {
+                    await api.setRootPath(r.id, dir);
+                    await api.startScan(r.id);
+                  }, `Đã đổi đường dẫn của ${accountName(r)}. Đang quét lại…`);
+                }}
+                onPickTrash={async (t) => {
+                  const dir = await open({ directory: true, title: "Chọn thư mục làm thùng rác", defaultPath: t.dir });
+                  if (typeof dir === "string") await run(() => api.setTrashDir(r.id, dir), "Đã đổi nơi lưu thùng rác");
+                }}
+                onDefaultTrash={() => run(() => api.setTrashDir(r.id, null), "Đã dùng lại thùng rác mặc định")}
+                onReport={() => exportReport(r)}
+              />
+            ))}
+        {noMedia.map((a) => (
+          <div key={a.uid} className="text-muted-foreground flex items-center gap-3 rounded-xl border border-dashed p-4 text-sm">
+            <Badge variant="outline">Chưa có media</Badge>
+            <span className="text-foreground font-medium">Tài khoản {shortUid(a.uid)}</span>
+            <span>Đã đăng nhập trên máy nhưng chưa tải ảnh / file nào — không có gì để dọn.</span>
+          </div>
+        ))}
+        <div>
+          <Button variant="outline" onClick={addRoot}>
+            <FolderPlus /> Thêm thư mục dữ liệu Zalo…
+          </Button>
+        </div>
+      </section>
+
+      <section className="grid gap-3">
+        <SectionTitle
+          title="Bản sao lưu ZIP"
+          hint='Nơi hộp thoại "Nén ZIP để sao lưu" mở sẵn. Bạn vẫn chọn được nơi khác mỗi lần nén (USB, ổ D, thư mục Google Drive / OneDrive…).'
+        />
+        <Card className="py-4">
+          <CardContent>
+            {!s ? (
+              <Skeleton className="h-10" />
+            ) : (
+              <PathRow
+                icon={<FileArchive />}
+                label="Thư mục lưu ZIP"
+                path={s.backupDir}
+                badge={<Badge variant={s.backupIsDefault ? "secondary" : "outline"}>{s.backupIsDefault ? "Mặc định" : "Tự chọn"}</Badge>}
+                actions={
+                  <>
+                    <Button variant="outline" size="sm" onClick={pickBackup}>
                       <FolderOpen /> Chọn thư mục…
                     </Button>
-                    {!t.isDefault && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => run(() => api.setTrashDir(t.rootId, null), "Đã dùng lại thùng rác mặc định")}
-                      >
-                        <RotateCcw /> Dùng mặc định
+                    {!s.backupIsDefault && (
+                      <Button variant="ghost" size="sm" onClick={() => run(() => api.setBackupDir(null), "Đã dùng lại thư mục mặc định")}>
+                        <RotateCcw /> Mặc định
                       </Button>
                     )}
-                  </div>
-                );
-              })}
-        </CardContent>
-      </Card>
+                  </>
+                }
+              />
+            )}
+          </CardContent>
+        </Card>
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileArchive className="size-5" /> Thư mục lưu bản sao lưu ZIP
-          </CardTitle>
-          <CardDescription>
-            Nơi hộp thoại "Nén ZIP để sao lưu" mở sẵn. Bạn vẫn có thể chọn nơi khác mỗi lần nén (USB, ổ D, thư mục Google Drive /
-            OneDrive…).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!s ? (
-            <Skeleton className="h-12" />
-          ) : (
-            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3">
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-xs" title={s.backupDir}>
-                  {s.backupDir}
-                </div>
-                <Badge className="mt-1" variant={s.backupIsDefault ? "secondary" : "outline"}>
-                  {s.backupIsDefault ? "Mặc định" : "Tự chọn"}
-                </Badge>
-              </div>
-              <Button variant="outline" size="sm" onClick={pickBackup}>
-                <FolderOpen /> Chọn thư mục…
-              </Button>
-              {!s.backupIsDefault && (
-                <Button variant="ghost" size="sm" onClick={() => run(() => api.setBackupDir(null), "Đã dùng lại thư mục mặc định")}>
-                  <RotateCcw /> Dùng mặc định
-                </Button>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <section className="grid gap-3">
+        <SectionTitle title="Hỗ trợ" hint="App không gửi dữ liệu nào ra ngoài. Nhật ký chỉ được lưu vào file bạn chọn để gửi cho nhà phát triển khi gặp lỗi." />
+        <div>
+          <Button variant="outline" onClick={exportLog}>
+            <ScrollText /> Xuất nhật ký
+          </Button>
+        </div>
+        <p className="text-muted-foreground text-xs">Zola Cleaner là phần mềm mã nguồn mở độc lập, không liên kết với Zalo hay VNG.</p>
+      </section>
     </div>
+  );
+}
+
+function SectionTitle({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="text-muted-foreground text-sm">{hint}</p>
+    </div>
+  );
+}
+
+/** Một dòng đường dẫn: nhãn, đường dẫn, ghi chú, nút. */
+function PathRow({
+  icon,
+  label,
+  path,
+  badge,
+  note,
+  actions,
+}: {
+  icon: ReactNode;
+  label: string;
+  path: string;
+  badge?: ReactNode;
+  note?: ReactNode;
+  actions: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[auto_1fr_auto] items-start gap-3">
+      <span className="text-muted-foreground mt-0.5 [&_svg]:size-4">{icon}</span>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {label} {badge}
+        </div>
+        <div className="text-muted-foreground truncate font-mono text-xs" title={path}>
+          {path}
+        </div>
+        {note && <div className="mt-1 text-xs">{note}</div>}
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">{actions}</div>
+    </div>
+  );
+}
+
+function AccountCard({
+  root: r,
+  trash: t,
+  onChangePath,
+  onPickTrash,
+  onDefaultTrash,
+  onReport,
+}: {
+  root: RootInfo;
+  trash?: TrashSetting;
+  onChangePath: () => void;
+  onPickTrash: (t: TrashSetting) => void;
+  onDefaultTrash: () => void;
+  onReport: () => void;
+}) {
+  const status = !r.exists ? (
+    <Badge variant="outline" className="text-muted-foreground">
+      <FolderX /> Không còn ở đây
+    </Badge>
+  ) : r.layout.status === "supported" ? (
+    <Badge variant="secondary">
+      <CircleCheck /> Dọn được
+    </Badge>
+  ) : (
+    <Badge variant="outline" className="border-amber-400 text-amber-700">
+      <TriangleAlert /> Chỉ xem
+    </Badge>
+  );
+
+  return (
+    <Card className="gap-4 py-4">
+      <CardHeader className="flex flex-row flex-wrap items-center gap-3">
+        <AccountLabel root={r} />
+        {status}
+        <CardDescription className="font-mono text-xs">uid {shortUid(r.uid)}</CardDescription>
+        <div className="flex-1" />
+        <Button variant="ghost" size="sm" disabled={!r.exists} onClick={onReport} title="Gửi cho nhà phát triển khi app báo Chỉ xem">
+          <FileDown /> Xuất báo cáo cấu trúc
+        </Button>
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <PathRow
+          icon={<HardDrive />}
+          label="Thư mục dữ liệu Zalo"
+          path={r.path}
+          note={
+            !r.exists ? (
+              <span className="text-amber-700">
+                Thư mục này không còn — có thể bạn đã đổi "Vị trí lưu trữ" của Zalo hoặc tự di chuyển. Bấm Chọn vị trí mới.
+              </span>
+            ) : r.layout.status === "unsupported" ? (
+              <span className="text-muted-foreground">{r.layout.reasons.join(" · ")}</span>
+            ) : null
+          }
+          actions={
+            <Button variant={r.exists ? "outline" : "default"} size="sm" onClick={onChangePath}>
+              <FolderInput /> {r.exists ? "Đổi đường dẫn…" : "Chọn vị trí mới…"}
+            </Button>
+          }
+        />
+        {t && (
+          <PathRow
+            icon={<Archive />}
+            label="Thùng rác"
+            path={t.dir}
+            badge={<Badge variant={t.isDefault ? "secondary" : "outline"}>{t.isDefault ? "Mặc định" : "Tự chọn"}</Badge>}
+            note={
+              <span className="text-muted-foreground flex flex-wrap items-center gap-x-2">
+                {t.sameDrive ? (
+                  <span className="flex items-center gap-1">
+                    <Zap className="size-3" /> Cùng ổ với dữ liệu Zalo — chuyển tức thì
+                  </span>
+                ) : (
+                  <span className="text-trash">Khác ổ — chép sang (chậm hơn), ổ Zalo trống ngay</span>
+                )}
+                {t.free != null && <span>· ổ này còn trống {formatBytes(t.free)}</span>}
+                <span>· chỉ áp dụng cho lần dọn sau</span>
+              </span>
+            }
+            actions={
+              <>
+                <Button variant="outline" size="sm" onClick={() => onPickTrash(t)}>
+                  <FolderOpen /> Chọn thư mục…
+                </Button>
+                {!t.isDefault && (
+                  <Button variant="ghost" size="sm" onClick={onDefaultTrash}>
+                    <RotateCcw /> Mặc định
+                  </Button>
+                )}
+              </>
+            }
+          />
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Ô đặt tên dễ nhớ cho tài khoản (lưu khi rời ô hoặc nhấn Enter). */
+function AccountLabel({ root }: { root: RootInfo }) {
+  const qc = useQueryClient();
+  const [value, setValue] = useState(root.label ?? "");
+  useEffect(() => setValue(root.label ?? ""), [root.label]);
+  const saveLabel = async () => {
+    if ((root.label ?? "") === value.trim()) return;
+    try {
+      await api.setRootLabel(root.id, value.trim() || null);
+      await qc.invalidateQueries({ queryKey: keys.roots });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+  return (
+    <Input
+      className="h-9 w-64 text-base font-semibold"
+      value={value}
+      placeholder={`Đặt tên (vd. "Zalo công việc")`}
+      title="Tên dễ nhớ cho tài khoản này, chỉ lưu trong Zola Cleaner"
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={saveLabel}
+      onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+    />
   );
 }
