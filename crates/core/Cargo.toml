@@ -1,0 +1,25 @@
+[package]
+name = "zalo-cleaner-core"
+description = "Lõi Zalo Cleaner: quét, nhận diện, cách ly / khôi phục media của Zalo PC"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "zc_core"
+
+[dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+jxl-oxide = { version = "0.12.6", features = ["image"] }
+rayon = "1.12.0"
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_Diagnostics_ToolHelp"] }
+
+[dev-dependencies]
+tempfile = "3.27.0"
