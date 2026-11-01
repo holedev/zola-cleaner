@@ -289,7 +289,7 @@ async fn conversations(
 ) -> CmdResult<Vec<ConversationSummary>> {
     check_filter(&filter)?;
     let s = state.inner().clone();
-    blocking(move || Ok(stats::list_conversations(&s.db()?, &filter, 6)?)).await
+    blocking(move || Ok(stats::list_conversations(&s.db()?, &filter, 10)?)).await
 }
 
 #[tauri::command]

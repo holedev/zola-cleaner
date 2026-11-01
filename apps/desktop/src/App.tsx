@@ -162,7 +162,7 @@ export default function App() {
   }
 
   return (
-    <main className="mx-auto grid max-w-7xl gap-5 px-6 py-5">
+    <main className="mx-auto grid w-full max-w-[1920px] gap-5 px-6 py-5 2xl:px-10">
       <header className="flex flex-wrap items-center gap-4">
         <h1 className="text-xl font-semibold tracking-tight">Zola Cleaner</h1>
         {roots.data.length > 1 && (

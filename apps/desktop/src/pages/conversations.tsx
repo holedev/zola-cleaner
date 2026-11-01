@@ -127,7 +127,8 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
       return next;
     });
 
-  const p = preview.data;
+  // Bỏ chọn hết → không hiện số liệu cũ còn giữ trong cache (keepPreviousData)
+  const p = selection ? preview.data : undefined;
   const title = allConvs ? "Dọn ở mọi hội thoại" : `Dọn ${selected.size} hội thoại đã chọn`;
 
   return (
@@ -284,7 +285,7 @@ export function ConversationsPage({ rootId, readOnly, onCleanup }: Props) {
       <ConversationMonthsDialog conv={monthsFor} base={base} onClose={() => setMonthsFor(null)} onCleanup={onCleanup} />
 
       <footer className="bg-background/95 fixed inset-x-0 bottom-0 z-10 border-t backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
+        <div className="mx-auto flex w-full max-w-[1920px] items-center gap-4 px-6 py-3 2xl:px-10">
           <div className="flex-1 text-sm">
             {!selection ? (
               <span className="text-muted-foreground">Chọn hội thoại (hoặc "Mọi hội thoại") và ít nhất một loại.</span>
@@ -449,14 +450,15 @@ function Row({
               key={id}
               type="button"
               title="Xem ảnh"
-              className="focus-visible:ring-ring rounded outline-none focus-visible:ring-2"
+              // 6 ảnh trên màn hình thường, 10 ảnh trên màn hình lớn
+              className={cn("focus-visible:ring-ring rounded outline-none focus-visible:ring-2", i >= 6 && "hidden 2xl:block")}
               onClick={() => view(c.thumbIds, i, c.alias || c.convId)}
             >
               <img
                 src={api.thumbUrl(id)}
                 loading="lazy"
                 alt=""
-                className="bg-muted size-10 rounded object-cover transition hover:brightness-90"
+                className="bg-muted size-10 rounded object-cover transition hover:brightness-90 2xl:size-12"
                 onError={(e) => (e.currentTarget.style.visibility = "hidden")}
               />
             </button>

@@ -47,7 +47,7 @@ export function SuggestionsPage({ rootId, readOnly, onCleanup }: Props) {
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold">
           <Sparkles className="size-5" /> Gợi ý dọn nhanh
         </h2>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-4">
           {suggestions.isPending
             ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)
             : suggestions.data?.map((s) => (
