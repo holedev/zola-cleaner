@@ -1,7 +1,8 @@
 # Zalo Cleaner — Kế hoạch dự án
 
-> Web app chạy local (localhost) để **phân tích và dọn dẹp** dữ liệu media mà Zalo PC lưu trên máy:
+> App desktop Windows (Tauri + Rust) để **phân tích và dọn dẹp** dữ liệu media mà Zalo PC lưu trên máy:
 > ảnh, video, file đã nhận… vốn đã bị Zalo đổi tên thành chuỗi khó đọc và **không bị xoá theo** khi xoá hội thoại.
+> Phát hành công khai (MIT) cho người dùng phổ thông. Bản đầu tiên là web app Node (commit `3ea7fac`), đang được viết lại — xem [ADR 0002](adr/0002-tauri-rust-desktop.md).
 
 ---
 
@@ -33,17 +34,21 @@
 3. Danh sách **Conversation** xếp theo dung lượng, kèm thumbnail mới nhất và **Alias** do người dùng đặt.
 4. Chọn Conversation + lọc theo Media Kind, **Message Time**, kích thước. Tài liệu mặc định không tick.
 5. Dọn dẹp **an toàn**: Preview → Quarantine Job → Restore hoặc Purge. Shared Media Item chỉ dọn khi mọi Conversation của nó đều được chọn.
+6. Màn chính là các **Suggestion** có sẵn số GB; tab "Theo hội thoại" cho người muốn chọn chi tiết.
+7. Nhiều **Account**; chỉ dọn Media Store có **Supported Layout**, còn lại chỉ xem + xuất **Structure Report**.
+8. File cài NSIS theo từng user (không cần admin), tự cập nhật qua GitHub Releases.
 
 **Nên có**
-6. Thumbnail video bằng khung hình đầu.
-7. Tìm file trùng lặp (cùng nội dung).
-8. Quy tắc dọn dẹp lưu sẵn (ví dụ "video nhóm X cũ hơn 3 tháng") và chạy định kỳ.
+9. Thumbnail video bằng khung hình đầu.
+10. Tìm file trùng lặp (cùng nội dung).
+11. Quy tắc dọn dẹp lưu sẵn (ví dụ "video nhóm X cũ hơn 3 tháng").
 
 **Không làm (ít nhất ở giai đoạn đầu)**
 - Không đọc/sửa CSDL của Zalo; không lấy tên thật của hội thoại.
 - Không đụng ngoài Media Store (CSDL, cache Chromium, sticker, file người dùng tự lưu như `D:\Zalo`).
 - Không xoá Thumbnail (`Cache\`, `richThumb\`, `fileThumb\`).
-- Không chạy như dịch vụ nền / không mở ra mạng LAN.
+- Không chạy như dịch vụ nền / không mở cổng mạng; không gửi dữ liệu nào đi (chỉ kiểm tra cập nhật).
+- Không tự tắt Zalo (có thể làm hỏng CSDL Zalo đang ghi).
 
 ---
 
@@ -53,9 +58,10 @@
 2. **Cách ly trước, xoá sau.** Cách ly một Media Item = `rename` một Link vào `%APPDATA%\zalo-cleaner\quarantine\<jobId>\` (cùng ổ với ZaloData, ngoài ZaloData) và gỡ các Link còn lại. Mọi Link được ghi vào nhật ký **trước**; Restore = rename ngược + tạo lại hardlink. Dung lượng chỉ giảm khi Purge (người dùng bấm, hoặc sau Retention 7 ngày).
    - Không dùng Thùng rác Windows: Recycle Bin có giới hạn dung lượng, chậm, và không hiểu hardlink.
 3. **Allowlist theo thư mục kho.** Chỉ Link kho trong `picture\`, `video\`, `fileNoise\`, `file\` được dọn (kèm các Link `resource\` của cùng Media Item). Không bao giờ dọn `Cache\`, `richThumb\`, `fileThumb\`, `voice\`, `zinstant\`, `.rescache`, file `database`.
-4. **Kiểm tra Zalo đang chạy** (`tasklist` tìm `Zalo.exe`) trước khi cách ly/xoá; yêu cầu tắt Zalo.
+4. **Kiểm tra Zalo đang chạy** (tìm tiến trình `Zalo.exe`) trước khi cách ly/khôi phục; chặn và hướng dẫn người dùng tự thoát Zalo.
 5. **Nhật ký mọi thao tác** trong SQLite (job, file, đường dẫn cũ → mới, thời điểm) để khôi phục được kể cả khi app bị tắt giữa chừng.
-6. **Chỉ lắng nghe `127.0.0.1`**, kiểm tra header `Host` và `Origin`, kèm token ngẫu nhiên sinh lúc khởi động → chống trang web lạ gọi vào API localhost (CSRF / DNS rebinding).
+6. **Không có HTTP server.** UI gọi lõi qua IPC của Tauri; capabilities tối thiểu, CSP chặt.
+7. **Chỉ dọn Supported Layout.** Media Store lạ → chỉ đọc.
 
 ---
 
@@ -63,44 +69,45 @@
 
 ```
 zalo-cleaner/
-├─ packages/core        # Logic thuần, không phụ thuộc HTTP — test được độc lập
-│  ├─ detect.ts         # Nhận diện loại file qua magic bytes
-│  ├─ scan.ts           # Duyệt thư mục, quét tăng dần, ghi chỉ mục
-│  ├─ db.ts             # Schema + truy vấn SQLite (node:sqlite)
-│  ├─ stats.ts          # Thống kê cho dashboard
-│  ├─ quarantine.ts     # Cách ly / khôi phục / xoá vĩnh viễn
-│  └─ safety.ts         # Kiểm tra Zalo đang chạy, allowlist
-├─ apps/server          # Hono trên Node (@hono/node-server), REST + SSE
-└─ apps/web             # Vite + React + TypeScript (UI)
+├─ Cargo.toml              # Cargo workspace
+├─ crates/core             # zalo-cleaner-core: logic thuần, test độc lập + bin `zc` (quét từ dòng lệnh)
+│  ├─ layout.rs            # parse Link, Conversation, Account, Supported Layout (fingerprint)
+│  ├─ detect.rs            # magic bytes, JPEG XL, Office trong ZIP, giải XOR fileNoise
+│  ├─ scan.rs              # duyệt thư mục, NTFS file id khi liệt kê, quét tăng dần
+│  ├─ db.rs                # schema + truy vấn SQLite (rusqlite, bundled)
+│  ├─ stats.rs             # thống kê, Conversation theo bộ lọc, Suggestion
+│  ├─ quarantine.rs        # Preview / Quarantine / Restore / Purge / Retention
+│  ├─ thumbs.rs            # thumbnail; JPEG XL bằng jxl-oxide
+│  ├─ safety.rs            # Zalo đang chạy, allowlist
+│  └─ report.rs            # Structure Report, xuất nhật ký đã lược
+├─ apps/desktop            # Tauri v2: src-tauri (command, protocol thumb://) + src (React + shadcn/ui)
+└─ (cũ, xoá khi port xong) packages/core, apps/server, apps/web
 ```
 
 ### Lựa chọn công nghệ
 
 | Thành phần | Chọn | Lý do |
 |---|---|---|
-| Runtime | **Node ≥ 22.13** (LTS) | Truy cập file hệ thống, có sẵn `node:sqlite` |
-| CSDL | **`node:sqlite`** (built-in) | Không phải build native trên Windows. Nếu cần hiệu năng hơn → `better-sqlite3` |
-| API | **Hono** + `@hono/node-server` | Quen thuộc, nhẹ, type-safe với `hono/client` |
-| UI | **Vite + React + TS** | Đơn giản cho SPA chạy local; có thể thay bằng framework khác |
-| Thumbnail | `sharp` (Giai đoạn 3) | Có prebuilt cho Windows; cache thumbnail ra đĩa |
-| Video thumbnail | `ffmpeg` (tuỳ chọn) | Chỉ bật nếu máy có ffmpeg |
-| Hash trùng lặp | `node:crypto` (sha1/xxhash) | Chỉ hash file có cùng kích thước |
-| Monorepo | **pnpm workspaces** | |
-| Đóng gói (sau) | Script `start.bat` mở trình duyệt; hoặc build `.exe` bằng Node SEA | |
+| Vỏ app | **Tauri v2** (WebView2) | File cài ~10 MB, có sẵn trên Windows 11 — xem ADR 0002 |
+| Lõi | **Rust** | Nhanh, một tiến trình; NTFS file id qua crate `windows` |
+| CSDL | **rusqlite** (bundled) | Không phụ thuộc SQLite của hệ thống |
+| JPEG XL | **jxl-oxide** + `image` | Rust thuần, không phải build C++ |
+| UI | **Vite + React + TS + Tailwind + shadcn/ui**, TanStack Query | Trạng thái loading rõ ràng |
+| Phát hành | GitHub Actions + `tauri-action`, NSIS `currentUser`, Tauri updater | Chưa ký code — hướng dẫn vượt SmartScreen |
 
 ### Luồng dữ liệu
 
 ```
-[Thư mục gốc] ──walk──▶ [stat: size, mtime] ──đã có & không đổi?──▶ bỏ qua
+[Media Store] ──liệt kê thư mục (kèm file id)──▶ đã có & không đổi? ──▶ chỉ đánh dấu đã thấy
                                    │ mới/đổi
                                    ▼
                           [đọc 64 byte đầu] ─▶ detect() ─▶ category, kind
                                    ▼
-                       [SQLite: bảng files, ghi theo lô 1000 dòng/transaction]
+                       [SQLite: items + links, ghi theo lô]
                                    ▼
-            [stats / filter API] ──▶ [UI dashboard, lưới file, chọn]
+          [command IPC: stats / conversations / suggestions] ──▶ [UI]
                                    ▼
-                [cleanup job: dry-run → quarantine → restore | purge]
+                [Preview → Quarantine Job → Restore | Purge]
 ```
 
 ---
@@ -112,7 +119,7 @@ roots(id, path UNIQUE, label, created_at)                       -- mỗi root l�
 
 items(                                                           -- Media Item = file vật lý
   id INTEGER PK, root_id,
-  file_key TEXT,                  -- "<dev>:<ino>" (NTFS file id) — UNIQUE(root_id, file_key)
+  file_key TEXT,                  -- "<volume serial>:<file id>" (NTFS) — UNIQUE(root_id, file_key)
   size, mtime_ms,
   msg_ts INTEGER NULL,            -- Message Time, lấy từ tên Link trong resource/
   area TEXT,                      -- thư mục kho: picture | video | fileNoise | file | Cache | ...
@@ -132,75 +139,72 @@ job_items(job_id, item_id, links_json, quarantine_path, state, error)  -- state:
 rules(id, name, filter_json, enabled, schedule)                    -- Giai đoạn 4
 ```
 
-**Quét tăng dần:** mỗi Link được `stat` (bigint) để lấy `file_key`. Media Item đã biết, cùng `size` + `mtime_ms` → không đọc lại header.
+**Quét tăng dần:** file id của mỗi Link lấy ngay khi liệt kê thư mục (`FileIdBothDirectoryInfo`), không mở từng file. Media Item đã biết, cùng `size` + `mtime_ms` → không đọc lại header.
 Mỗi Media Item chỉ đọc header một lần dù có nhiều Link. Cuối lần quét: Link không còn thấy bị xoá khỏi chỉ mục, Media Item `present` không còn thấy → `missing`.
 
 ---
 
-## 6. API
+## 6. Command (IPC)
 
-| Method | Path | Mô tả |
-|---|---|---|
-| GET | `/api/health` | Server, phiên bản, Zalo có đang chạy |
-| GET/POST/DELETE | `/api/roots` | Quản lý Media Store; `GET /api/roots/detect` gợi ý `%APPDATA%\ZaloData\media\*\ZaloDownloads` |
-| POST | `/api/scans` | Bắt đầu quét `{ rootId }` → `{ scanId }`; `GET /api/scans/:id/events` SSE |
-| GET | `/api/stats` | Tổng hợp theo loại / thư mục kho / tháng (không đếm trùng hardlink) |
-| GET | `/api/conversations` | Danh sách Conversation: bytes, bytes riêng, số item theo loại, item mới nhất |
-| PATCH | `/api/conversations/:convId` | Đặt Alias |
-| GET | `/api/items/:id/thumb` | Thumbnail (JPEG trong `Cache/` theo Message Time, hoặc ảnh gốc jpg/png/gif/webp) |
-| POST | `/api/cleanup/preview` | Preview `{ rootId, convIds?, categories, olderThanDays?, minSize? }` |
-| POST | `/api/cleanup` | Tạo Quarantine Job → kết quả |
-| GET | `/api/jobs` | Danh sách job |
-| POST | `/api/jobs/:id/restore`, `/api/jobs/:id/purge` | Restore / Purge |
+| Command | Mô tả |
+|---|---|
+| `health` | Phiên bản, Zalo có đang chạy, lần quét đang chạy |
+| `roots`, `add_root`, `detect_roots` | Account / Media Store, kèm Supported Layout |
+| `start_scan(rootId, channel)` | Quét, tiến độ gửi qua `Channel` |
+| `stats`, `suggestions` | Tổng hợp, Suggestion kèm số byte |
+| `conversations(filter)` | Conversation: tổng, riêng, **dọn được theo bộ lọc**, thumbnail |
+| `set_alias` | Đặt Alias |
+| `preview(filter)`, `quarantine(filter)` | Preview / tạo Quarantine Job |
+| `jobs`, `restore(jobId)`, `purge(jobId)` | Quarantine Job |
+| `export_report`, `export_log` | Structure Report / nhật ký đã lược |
+| protocol `thumb://<itemId>` | Thumbnail (Zalo `Cache/`, ảnh gốc, hoặc JXL đã giải mã) |
 
 ---
 
 ## 7. Giao diện
 
-1. **Tổng quan** — tổng GB thật, theo loại, theo thư mục kho; nút Quét.
+1. **Tổng quan / Gợi ý** — tổng GB thật; các Suggestion ("Ảnh & video cũ hơn 1 năm", "Video > 50 MB"…) kèm GB → Preview.
 2. **Hội thoại** — bảng xếp theo GB: thumbnail mới nhất, ID + cờ nhóm, ô Alias, GB riêng / GB tổng, checkbox.
    Thanh lọc: loại (Ảnh, Video ✔ — Tài liệu, Khác ☐), cũ hơn N ngày, lớn hơn N MB → **Preview** (số file, GB, số bị bỏ qua vì dùng chung) → Cách ly.
-3. **Cách ly** — danh sách job, dung lượng, ngày hết hạn, nút Khôi phục / Xoá vĩnh viễn.
+3. **Cách ly** — danh sách job, dung lượng, ngày tự xoá, nút **Giải phóng ngay** / Khôi phục. Đóng app khi còn job → nhắc.
+4. Thao tác dài có hộp thoại tiến độ chặn thao tác khác; banner "Zalo đang chạy" có hình hướng dẫn thoát; Media Store lạ → chỉ đọc + Xuất báo cáo cấu trúc.
 
 ---
 
 ## 8. Lộ trình
 
-### Giai đoạn 0 — Khảo sát
-- [x] Khảo sát cấu trúc thật → [zalo-layout.md](zalo-layout.md)
-- [ ] Thực nghiệm cách ly tay 1 hội thoại nhỏ (xem câu hỏi ở mục 1)
+Bản web Node (commit `3ea7fac`) đã xong: quét, Conversation, Preview, Quarantine / Restore / Purge, thumbnail JXL.
 
-### Giai đoạn 1 — Lõi quét & chỉ mục
-- [x] `detect.ts` + test, giải XOR cho `fileNoise`, JPEG XL
-- [x] Mô hình Media Item / Link, quét tăng dần theo `file_key`, gắn Conversation + Message Time
-- [ ] Đo hiệu năng trên dữ liệu thật
-- [ ] Đường dẫn dài > 260 ký tự
+### Giai đoạn 0 — Thực nghiệm (bằng app Node)
+- [ ] Cách ly 1 hội thoại nhỏ, mở Zalo xem phản ứng, khôi phục → ghi vào [zalo-layout.md](zalo-layout.md); quyết định `.rescache`
 
-### Giai đoạn 2 — Hội thoại & lọc
-- [x] `/api/stats` không đếm trùng, `/api/conversations`, Alias, thumbnail từ `Cache/`
-- [x] UI Hội thoại + bộ lọc
+### Giai đoạn 1 — Toolchain
+- [ ] Rust (stable-msvc) + VS Build Tools (C++); khoá ký cập nhật Tauri (không commit)
 
-### Giai đoạn 3 — Dọn dẹp an toàn ← **mục tiêu chính**
-- [x] Preview (bỏ qua Shared Media Item), Quarantine Job xử lý mọi Link, Restore tạo lại hardlink, Purge, tự Purge sau Retention
-- [x] UI Preview → Cách ly → Khôi phục / Xoá vĩnh viễn
-- [ ] Sửa `.rescache` nếu thực nghiệm Giai đoạn 0 cho thấy cần
+### Giai đoạn 2 — Lõi Rust (`crates/core`)
+- [ ] Port layout / detect / db / scan / stats / quarantine / thumbs / safety + test đối chiếu từ bản TS
+- [ ] Supported Layout (fingerprint), Structure Report, nhật ký đã lược
+- [ ] `zc scan` khớp số liệu bản TS trên dữ liệu thật; đường dẫn > 260 ký tự
 
-### Giai đoạn 4 — Nâng cao (tuỳ thời gian)
-- [ ] Tìm trùng lặp (nhóm theo size → quick hash → full hash)
-- [ ] Quy tắc lưu sẵn + chạy khi mở app
-- [ ] Thumbnail video bằng ffmpeg; xem ảnh `.jxl`
-- [ ] Đóng gói: `start.bat` / Node SEA `.exe`
+### Giai đoạn 3 — App desktop (`apps/desktop`)
+- [ ] Command + protocol `thumb://`; UI shadcn: Gợi ý, Theo hội thoại (theo bộ lọc), Cách ly, loading / chặn thao tác
+
+### Giai đoạn 4 — Phát hành
+- [ ] Repo public mới (MIT, lịch sử làm sạch), CI build NSIS + updater, README người dùng cuối
+
+### Giai đoạn 5 — Gỡ code cũ và nâng cao
+- [ ] Xoá `packages/core`, `apps/server`, `apps/web`
+- [ ] Tìm trùng lặp; quy tắc lưu sẵn; thumbnail video
 
 ---
 
 ## 9. Hiệu năng
 
-- Duyệt thư mục bằng stack lặp (không đệ quy) với `fs.readdir({ withFileTypes: true })`.
-- Chỉ đọc **64 byte đầu** mỗi Media Item (một lần dù nhiều Link); giới hạn song song ~64 thao tác I/O.
-- Ghi SQLite theo lô 1000 dòng trong một transaction; bật `journal_mode=WAL`, `synchronous=NORMAL`.
-- Thống kê bằng `GROUP BY` có index; với hàng triệu dòng vẫn < 1 giây.
-- Cách ly = `rename` trên cùng ổ → gần như tức thời, kể cả với hàng trăm GB.
-- Windows Defender có thể làm chậm quét lần đầu; cân nhắc thêm thư mục Zalo vào ngoại lệ trong lúc quét.
+- Liệt kê thư mục kèm file id (một lời gọi cho cả thư mục, không mở từng file); đọc **64 byte đầu** mỗi Media Item một lần, song song bằng `rayon`.
+- Ghi SQLite theo lô trong một transaction; `journal_mode=WAL`, `synchronous=NORMAL`.
+- Giải mã thumbnail JPEG XL trên pool riêng, cache ra đĩa, gộp request trùng — không bao giờ chặn UI.
+- Cách ly = `rename` trên cùng ổ → gần như tức thời.
+- Windows Defender có thể làm chậm quét lần đầu.
 
 ---
 
@@ -215,3 +219,7 @@ Mỗi Media Item chỉ đọc header một lần dù có nhiều Link. Cuối l�
 | Zalo cập nhật đổi cấu trúc lưu trữ | Nhận diện loại theo nội dung; gắn Conversation phụ thuộc `resource/` — xem ADR 0001 |
 | Zalo đang ghi file khi cách ly | Bắt buộc tắt Zalo |
 | Mất điện giữa chừng | `job_items` ghi trước khi move → khôi phục được |
+| Máy người khác có layout chưa khảo sát | Chỉ dọn Supported Layout; còn lại chỉ đọc + Structure Report |
+| Người dùng không mở lại app → file cách ly chiếm chỗ mãi | Sau cách ly hướng dẫn "Giải phóng ngay"; nhắc khi đóng app; tự xoá quá 7 ngày ở lần mở sau |
+| SmartScreen cảnh báo file chưa ký | Hướng dẫn có hình + SHA-256; mã nguồn public, build từ CI |
+| Lộ dữ liệu riêng tư | Không gửi gì đi; báo cáo / nhật ký đã lược tên file và ID |

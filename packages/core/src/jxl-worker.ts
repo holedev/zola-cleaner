@@ -30,12 +30,16 @@ let codecs: Promise<Codecs> | undefined;
 function loadCodecs(): Promise<Codecs> {
   codecs ??= (async () => {
     // Emscripten của jSquash cần ImageData — Node không có sẵn
-    (globalThis as { ImageData?: unknown }).ImageData ??= class {
-      constructor(
-        public data: Uint8ClampedArray,
-        public width: number,
-        public height: number,
-      ) {}
+    // Không dùng parameter property: core phải chạy được bằng Node thuần (strip-only), không qua tsx
+    (globalThis as { ImageData?: unknown }).ImageData ??= class implements Img {
+      data: Uint8ClampedArray;
+      width: number;
+      height: number;
+      constructor(data: Uint8ClampedArray, width: number, height: number) {
+        this.data = data;
+        this.width = width;
+        this.height = height;
+      }
     };
     // Nạp .wasm từ đĩa (mặc định jSquash dùng fetch, không chạy được trên Node). lib DOM không bật → tự khai báo kiểu.
     const { WebAssembly: WA } = globalThis as unknown as { WebAssembly: { Module: new (bytes: Uint8Array) => object } };
