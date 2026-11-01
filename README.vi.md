@@ -77,6 +77,11 @@ Phát hành tự động. Commit theo [Conventional Commits](https://www.convent
 
 Khi viết test hoặc tài liệu, đừng dùng uid hay ID hội thoại Zalo thật. Hãy dùng số giả.
 
+## Liên hệ
+
+- Báo lỗi, góp ý tính năng: mở [issue](../../issues). Nếu app báo cấu trúc Zalo chưa được hỗ trợ, hãy đính kèm báo cáo cấu trúc mà app xuất ra. Báo cáo này không chứa tên file hay ID.
+- Tác giả: [@holedev](https://github.com/holedev)
+
 ## Giấy phép
 
-[MIT](LICENSE). Zola Cleaner là dự án độc lập, **không liên kết với Zalo hay VNG**. "Zalo" là nhãn hiệu của chủ sở hữu tương ứng.
+[MIT](LICENSE).

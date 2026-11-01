@@ -78,6 +78,11 @@ Releasing is automatic. Commits follow [Conventional Commits](https://www.conven
 
 When writing tests or docs, never use real Zalo uids or conversation IDs. Use fake numbers.
 
+## Contact
+
+- Bugs and feature requests: open an [issue](../../issues). If the app says your Zalo layout isn't supported, attach the structure report it exports. The report doesn't contain file names or IDs.
+- Author: [@holedev](https://github.com/holedev)
+
 ## License
 
-[MIT](LICENSE). Zola Cleaner is an independent project, **not affiliated with Zalo or VNG**. "Zalo" is a trademark of its respective owner.
+[MIT](LICENSE).
