@@ -8,7 +8,6 @@ import trash from "../../../../docs/screenshots/trash.png";
 import type { Copy, Lang } from "../lib/i18n";
 import { ISSUES_URL, REPO_URL } from "../lib/links";
 import DownloadButton from "./DownloadButton.astro";
-import SmartScreen from "./SmartScreen.astro";
 
 interface Props {
   lang: Lang;
@@ -229,7 +228,6 @@ const safetyIcons = [icons.lock, icons.offline, icons.file, icons.trash, icons.c
         </li>
       </ol>
       <div class="space-y-5">
-        <SmartScreen copy={copy} />
         <p class="bg-warn-soft text-fg rounded-xl p-4 text-sm leading-relaxed [&_b]:font-semibold" set:html={copy.install.tip} />
         <p class="text-muted text-sm">{copy.install.update}</p>
       </div>
