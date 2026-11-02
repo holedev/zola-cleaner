@@ -16,6 +16,8 @@ Zalo PC saves every photo, video and document you receive in chats to drive C, o
 
 Zola Cleaner shows how much space Zalo is using and which conversations use it. Then it cleans only the part you choose.
 
+Curious where Zalo keeps your files and why they take so much space? See [**Where does Zalo PC keep your files?**](ZALO-STORAGE.md)
+
 > The app's interface is in Vietnamese, since Zalo is used mostly in Vietnam.
 
 ## Features

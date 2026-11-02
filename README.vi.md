@@ -17,6 +17,8 @@ Zalo PC lưu mọi ảnh, video, tài liệu nhận qua chat vào ổ C, thườ
 
 Zola Cleaner cho bạn thấy Zalo đang giữ bao nhiêu, ở hội thoại nào, và dọn đúng phần bạn chọn.
 
+Muốn biết Zalo cất file ở đâu và vì sao tốn chỗ? Xem [**Zalo PC lưu file của bạn ở đâu?**](ZALO-STORAGE.vi.md)
+
 ## Tính năng
 
 - **Dọn nhanh**: một câu cho biết Zalo đang chiếm bao nhiêu và dọn được bao nhiêu, ví dụ "Ảnh & video cũ hơn 1 năm → lấy lại 4,4 GB".
