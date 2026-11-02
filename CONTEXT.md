@@ -37,7 +37,7 @@ Bản mô tả hình dạng một Media Store (thư mục, số file, dung lư�
 _Avoid_: log, nhật ký (nhật ký là chuyện khác: ghi lại thao tác và lỗi của app)
 
 **Media Item**:
-Một file vật lý trên đĩa, có thể xuất hiện ở nhiều Link. Là đơn vị được đếm dung lượng, cách ly và xoá.
+Một file vật lý trên đĩa, có thể xuất hiện ở nhiều Link. Là đơn vị được đếm dung lượng, chuyển vào thùng rác và xoá vĩnh viễn.
 _Avoid_: file, path
 
 **Link**:
