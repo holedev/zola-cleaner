@@ -9,7 +9,7 @@
 ## 1. Bối cảnh & vấn đề
 
 - Zalo PC 5.x lưu dữ liệu ở `%APPDATA%\ZaloData` (~17 GB trên máy khảo sát). Media đã tải nằm ở
-  `media\<uid>\ZaloDownloads\` (~15 GB) — đây là **Media Store**, phạm vi dọn duy nhất. Chi tiết: [zalo-layout.md](zalo-layout.md).
+  `media\<uid>\ZaloDownloads\` (~15 GB) — đây là **Media Store**, phạm vi dọn duy nhất. Chi tiết: [zalo-layout.vi.md](zalo-layout.vi.md).
 - Tên file là chuỗi băm, thường **không có đuôi file**; tài liệu trong `fileNoise\` còn bị XOR `0x93` → phải nhận diện theo nội dung.
 - Mỗi media có một Link "kho" (`picture\`, `video\`, `fileNoise\`…) và hardlink trong `resource\<convId>\…` → **biết được media thuộc hội thoại nào** mà không cần đọc CSDL Zalo. Xem [ADR 0001](adr/0001-media-item-is-physical-file.md).
 - Xoá hội thoại trong Zalo **không xoá** media đã cache trên đĩa.
@@ -175,7 +175,7 @@ Mỗi Media Item chỉ đọc header một lần dù có nhiều Link. Cuối l�
 Bản web Node (commit `3ea7fac`) đã xong: quét, Conversation, Preview, Quarantine / Restore / Purge, thumbnail JXL.
 
 ### Giai đoạn 0 — Thực nghiệm (bằng app Node)
-- [x] Cách ly 1 hội thoại nhỏ, mở Zalo xem phản ứng → ghi vào [zalo-layout.md](zalo-layout.md): Zalo (có Cloud) tự tải lại ảnh, tự sửa `.rescache` → app không đụng `.rescache`
+- [x] Cách ly 1 hội thoại nhỏ, mở Zalo xem phản ứng → ghi vào [zalo-layout.vi.md](zalo-layout.vi.md): Zalo (có Cloud) tự tải lại ảnh, tự sửa `.rescache` → app không đụng `.rescache`
 - [ ] Kiểm tra Zalo hiển thị sau khi Khôi phục
 
 ### Giai đoạn 1 — Toolchain
