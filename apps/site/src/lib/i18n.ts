@@ -163,6 +163,7 @@ function vi(verified: string) {
       issues: "Báo lỗi, góp ý",
       license: "Giấy phép MIT",
       author: "Tác giả",
+      independent: "Zola Cleaner là dự án độc lập, không phải sản phẩm của Zalo hay VNG.",
     },
   };
 }
@@ -309,6 +310,7 @@ function en(verified: string): Copy {
       issues: "Report a bug or suggest a feature",
       license: "MIT license",
       author: "Author",
+      independent: "Zola Cleaner is an independent project, not a product of Zalo or VNG.",
     },
   };
 }
