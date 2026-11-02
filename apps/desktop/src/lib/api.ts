@@ -214,6 +214,20 @@ export interface AppSettings {
   savedDirsDefault: boolean;
 }
 
+/** Ổ chứa dữ liệu Zalo / Thùng rác: loại và sức khoẻ theo Windows. Không đọc được thì "unknown" / null. */
+export interface DriveCard {
+  /** Ví dụ "C:"; rỗng nếu là đường dẫn mạng. */
+  letter: string;
+  model: string | null;
+  media: "ssd" | "hdd" | "unknown";
+  /** NVMe, SATA, USB… */
+  bus: string | null;
+  health: "healthy" | "warning" | "unhealthy" | "unknown";
+  free: number | null;
+  total: number | null;
+  roles: ("zalo" | "trash")[];
+}
+
 export interface DiskInfo {
   /** Ổ chứa dữ liệu Zalo, ví dụ "C:". */
   drive: string;
@@ -283,6 +297,7 @@ export const api = {
   /** Mở bằng ứng dụng mặc định của Windows (qua một bản tạm, tài liệu fileNoise được giải mã). */
   openItem: (itemId: number) => call<void>("open_item", { itemId }),
   diskSpace: (rootId: number) => call<DiskInfo>("disk_space", { rootId }),
+  drives: (rootId: number) => call<DriveCard[]>("drives", { rootId }),
   settings: () => call<AppSettings>("settings"),
   setTrashDir: (rootId: number, path: string | null) => call<void>("set_trash_dir", { rootId, path }),
   setBackupDir: (path: string | null) => call<void>("set_backup_dir", { path }),

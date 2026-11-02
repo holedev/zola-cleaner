@@ -10,13 +10,14 @@ use tauri::http::{Response, StatusCode};
 use tauri::{AppHandle, Emitter, Manager, State};
 use zc_core::archive::{self, ArchiveResult};
 use zc_core::db::{self, Root};
+use zc_core::drive::DriveDetail;
 use zc_core::filter::CleanupFilter;
 use zc_core::layout::{self, Compatibility, DbVersion, LayoutCheck, ZaloVersion};
 use zc_core::quarantine::{self, CleanupItems, CleanupPreview, Job, JobOptions, JobResult};
 use zc_core::scan::{ScanOptions, ScanProgress};
 use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
 use zc_core::suggest::{self, Suggestion};
-use zc_core::{Error, docnames, fsx, report, safety, thumbs};
+use zc_core::{Error, docnames, drive, fsx, report, safety, thumbs};
 
 /// Lỗi trả về giao diện: `kind` để giao diện chọn cách hiển thị, `message` hiển thị thẳng.
 #[derive(Debug, Serialize)]
@@ -809,6 +810,54 @@ async fn disk_space(state: AppStateRef<'_>, root_id: i64) -> CmdResult<DiskInfo>
     .await
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DriveCard {
+    #[serde(flatten)]
+    detail: DriveDetail,
+    free: Option<u64>,
+    total: Option<u64>,
+    /// Ổ này chứa gì của app: "zalo" (Media Store), "trash" (Thùng rác).
+    roles: Vec<&'static str>,
+}
+
+/// Ổ chứa dữ liệu Zalo của tài khoản, và ổ chứa Thùng rác nếu khác ổ: loại, sức khoẻ, dung lượng.
+#[tauri::command]
+async fn drives(state: AppStateRef<'_>, root_id: i64) -> CmdResult<Vec<DriveCard>> {
+    let s = state.inner().clone();
+    blocking(move || {
+        let db = s.db()?;
+        let root = db::get_root(&db, root_id)?
+            .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
+        let trash = s.trash_dir_for(&db, root_id)?;
+        let mut cards: Vec<DriveCard> = Vec::new();
+        for (path, role) in [(PathBuf::from(&root.path), "zalo"), (trash, "trash")] {
+            let detail = drive::drive_detail(&path);
+            if !detail.letter.is_empty()
+                && let Some(c) = cards.iter_mut().find(|c| c.detail.letter == detail.letter)
+            {
+                c.roles.push(role);
+                continue;
+            }
+            // Thư mục thùng rác có thể chưa được tạo → đo dung lượng ở gốc ổ; đường dẫn mạng thì đo chính nó
+            let space = if detail.letter.is_empty() {
+                fsx::disk_space(&path)
+            } else {
+                fsx::disk_space(&PathBuf::from(format!("{}\\", detail.letter)))
+            }
+            .ok();
+            cards.push(DriveCard {
+                free: space.map(|s| s.0),
+                total: space.map(|s| s.1),
+                roles: vec![role],
+                detail,
+            });
+        }
+        Ok(cards)
+    })
+    .await
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ArchiveProgress {
@@ -1134,6 +1183,7 @@ pub fn run() {
             export_log,
             open_item,
             disk_space,
+            drives,
             export_backup,
             import_backup,
         ])
