@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import "@fontsource/be-vietnam-pro/400.css";
+@import "@fontsource/be-vietnam-pro/500.css";
+@import "@fontsource/be-vietnam-pro/600.css";
+@import "@fontsource/be-vietnam-pro/700.css";
+@import "@fontsource/be-vietnam-pro/800.css";
+
+/* Cùng bảng màu với app (apps/desktop/src/index.css): xanh dương = Zalo đang giữ, xanh lá = sẽ lấy lại. */
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, sans-serif;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-zalo: var(--zalo);
+  --color-reclaim: var(--reclaim);
+  --color-reclaim-soft: var(--reclaim-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+}
+
+:root {
+  color-scheme: light dark;
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --fg: #16181d;
+  --muted: #5d636e;
+  --line: #e1e4ea;
+  --zalo: #3e5bd8;
+  --reclaim: #0e7c70;
+  --reclaim-soft: #d5ece8;
+  --warn: #9a6212;
+  --warn-soft: #fbf0dc;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111317;
+    --surface: #1a1d23;
+    --fg: #eef0f3;
+    --muted: #a0a6b1;
+    --line: #2c3038;
+    --zalo: #7d93f0;
+    --reclaim: #3cc2b0;
+    --reclaim-soft: #133a35;
+    --warn: #f0b85c;
+    --warn-soft: #3a2c14;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 5rem;
+}
+
+body {
+  @apply bg-bg text-fg font-sans antialiased;
+}
+
+.figure {
+  font-variant-numeric: tabular-nums;
+}

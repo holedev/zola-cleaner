@@ -1,0 +1,93 @@
+---
+// Nút tải: không có JavaScript → trỏ tới trang Releases. Có JavaScript → script bên dưới hỏi GitHub
+// lấy file cài mới nhất và đổi link thành tải thẳng file .exe, kèm số phiên bản và dung lượng.
+import type { Copy } from "../lib/i18n";
+import { RELEASES_URL } from "../lib/links";
+
+interface Props {
+  copy: Copy;
+  size?: "lg" | "md";
+}
+const { copy, size = "lg" } = Astro.props;
+---
+
+<div class="flex flex-col items-start gap-2">
+  <a
+    href={RELEASES_URL}
+    data-download
+    class:list={[
+      "group bg-reclaim inline-flex items-center gap-3 rounded-xl font-semibold text-white shadow-sm transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-reclaim dark:text-[#06201c]",
+      size === "lg" ? "px-6 py-3.5 text-lg" : "px-5 py-3 text-base",
+    ]}
+  >
+    <svg aria-hidden="true" viewBox="0 0 24 24" class={size === "lg" ? "size-6" : "size-5"} fill="currentColor">
+      <path d="M3 5.1 10.4 4v7.1H3V5.1Zm8.3-1.2L21 2.5v8.6h-9.7V3.9ZM3 12h7.4v7.1L3 18v-6Zm8.3 0H21v8.6l-9.7-1.4V12Z"></path>
+    </svg>
+    {copy.download.label}
+  </a>
+  <span class="text-muted figure text-sm" data-download-meta data-template={copy.download.meta}>
+    {copy.download.fallbackMeta}
+  </span>
+</div>
+
+<script>
+  import { INSTALLER_SUFFIX, LATEST_RELEASE_API } from "../lib/links";
+
+  interface Asset {
+    name: string;
+    size: number;
+    browser_download_url: string;
+  }
+
+  type Found = { version: string; asset: Asset };
+
+  // GitHub chỉ cho 60 lượt hỏi mỗi giờ cho mỗi IP: nhớ kết quả 10 phút trong phiên, chuyển ngôn ngữ không hỏi lại.
+  const CACHE_KEY = "zc-latest-installer";
+  const CACHE_MS = 10 * 60 * 1000;
+
+  function cached(): Found | null {
+    try {
+      const c = JSON.parse(sessionStorage.getItem(CACHE_KEY) ?? "null");
+      return c && Date.now() - c.at < CACHE_MS ? c.found : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function latestInstaller(): Promise<Found | null> {
+    const hit = cached();
+    if (hit) return hit;
+    const res = await fetch(LATEST_RELEASE_API, { headers: { Accept: "application/vnd.github+json" } });
+    if (!res.ok) return null;
+    const release: { tag_name: string; assets: Asset[] } = await res.json();
+    const asset = release.assets.find((a) => a.name.endsWith(INSTALLER_SUFFIX));
+    if (!asset) return null;
+    const found = { version: release.tag_name, asset };
+    try {
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), found }));
+    } catch {
+      // Trình duyệt chặn lưu trữ: vẫn dùng kết quả lần này
+    }
+    return found;
+  }
+
+  latestInstaller()
+    .then((found) => {
+      if (!found) return;
+      const lang = document.documentElement.lang;
+      const mb = new Intl.NumberFormat(lang, { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(
+        found.asset.size / 1024 / 1024,
+      );
+      document.querySelectorAll<HTMLAnchorElement>("[data-download]").forEach((a) => {
+        a.href = found.asset.browser_download_url;
+      });
+      document.querySelectorAll<HTMLElement>("[data-download-meta]").forEach((el) => {
+        el.textContent = (el.dataset.template ?? "")
+          .replace("{version}", found.version)
+          .replace("{size}", `${mb} MB`);
+      });
+    })
+    .catch(() => {
+      // Giữ link tới trang Releases
+    });
+</script>

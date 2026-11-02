@@ -12,3 +12,6 @@ target/
 # Cài đặt riêng của Claude Code. Riêng .claude/skills được commit: liên kết tương đối tới .agents/skills
 .claude/*
 !.claude/skills/
+
+# Astro
+.astro/

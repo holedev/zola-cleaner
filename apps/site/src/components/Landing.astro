@@ -1,0 +1,279 @@
+---
+import { Image } from "astro:assets";
+import appIcon from "../../../desktop/app-icon.png";
+import conversations from "../../../../docs/screenshots/conversations.png";
+import overview from "../../../../docs/screenshots/overview.png";
+import quickClean from "../../../../docs/screenshots/quick-clean.png";
+import trash from "../../../../docs/screenshots/trash.png";
+import type { Copy, Lang } from "../lib/i18n";
+import { ISSUES_URL, REPO_URL } from "../lib/links";
+import DownloadButton from "./DownloadButton.astro";
+import SmartScreen from "./SmartScreen.astro";
+
+interface Props {
+  lang: Lang;
+  copy: Copy;
+}
+const { lang, copy } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const otherHref = copy.nav.otherLang === "vi" ? base : `${base}en/`;
+const shots = { conversations, trash, overview };
+const shotSizes = "(min-width: 1024px) 720px, 100vw";
+
+// Biểu tượng nét mảnh (kiểu lucide), đủ dùng cho vài chỗ, không kéo thêm thư viện.
+const icons = {
+  drive: "M22 12H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11ZM6 16h.01M10 16h.01",
+  filter: "M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
+  chat: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",
+  copy: "M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2ZM5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+  clock: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Zm0-14v4l3 2",
+  eye: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Zm10 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",
+  sparkle: "M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z",
+  layers: "m12 2 10 5-10 5L2 7l10-5Zm-10 10 10 5 10-5M2 17l10 5 10-5",
+  lock: "M7 11V7a5 5 0 0 1 10 0v4M5 11h14a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z",
+  offline: "M2 2l20 20M8.5 16.5a5 5 0 0 1 7 0M2 8.82a15 15 0 0 1 4.17-2.65M10.66 5c4.01-.36 8.14.9 11.34 3.76M16.85 11.25a10 10 0 0 1 2.22 1.68M5 13a10 10 0 0 1 5.24-2.76M12 20h.01",
+  file: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm0 0v6h6M9 15l2 2 4-4",
+  trash: "M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M10 11v6M14 11v6",
+  code: "m16 18 6-6-6-6M8 6l-6 6 6 6",
+  check: "M20 6 9 17l-5-5",
+};
+const problemIcons = [icons.drive, icons.filter, icons.chat, icons.copy, icons.clock];
+const extraIcons = [icons.sparkle, icons.eye, icons.layers];
+const safetyIcons = [icons.lock, icons.offline, icons.file, icons.trash, icons.code];
+---
+
+<header class="border-line/80 bg-bg/85 sticky top-0 z-20 border-b backdrop-blur">
+  <nav class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6">
+    <a href={lang === "vi" ? base : `${base}en/`} class="flex items-center gap-2.5 font-semibold">
+      <Image src={appIcon} alt="" width={32} height={32} class="size-8 rounded-lg" />
+      Zola Cleaner
+    </a>
+    <div class="text-muted ml-auto hidden items-center gap-6 text-sm md:flex">
+      <a href="#features" class="hover:text-fg">{copy.nav.features}</a>
+      <a href="#install" class="hover:text-fg">{copy.nav.install}</a>
+      <a href="#faq" class="hover:text-fg">{copy.nav.faq}</a>
+      <a href={REPO_URL} class="hover:text-fg">GitHub</a>
+    </div>
+    <a
+      href={otherHref}
+      hreflang={copy.nav.otherLang}
+      lang={copy.nav.otherLang}
+      class="border-line hover:bg-surface ml-auto rounded-lg border px-3 py-1.5 text-sm font-medium md:ml-0"
+    >
+      {copy.nav.other}
+    </a>
+  </nav>
+</header>
+
+<main>
+  <!-- Hero -->
+  <section class="mx-auto grid max-w-6xl gap-12 px-4 pt-14 pb-16 sm:px-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:items-center lg:pt-20">
+    <div>
+      <h1 class="text-4xl leading-[1.12] font-bold tracking-tight text-balance sm:text-5xl">
+        {copy.hero.title}
+        <span class="text-reclaim block">{copy.hero.accent}</span>
+      </h1>
+      <p class="text-muted mt-5 max-w-xl text-lg leading-relaxed text-pretty">{copy.hero.sub}</p>
+      <div class="mt-8 flex flex-wrap items-start gap-x-6 gap-y-4">
+        <DownloadButton copy={copy} />
+        <a href={REPO_URL} class="text-muted hover:text-fg inline-flex items-center gap-2 py-3.5 text-sm font-medium">
+          <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5" fill="currentColor">
+            <path
+              d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"
+            ></path>
+          </svg>
+          {copy.download.source}
+        </a>
+      </div>
+
+      <div class="border-line bg-surface mt-8 max-w-xl rounded-xl border p-5">
+        <h2 class="text-sm font-semibold">{copy.limits.title}</h2>
+        <ul class="text-muted mt-3 space-y-2 text-sm leading-relaxed">
+          {
+            copy.limits.items.map((item) => (
+              <li class="flex gap-2.5">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="text-reclaim mt-1 size-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d={icons.check} />
+                </svg>
+                <span class="[&_b]:text-fg [&_b]:font-semibold" set:html={item} />
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+
+    <figure>
+      <Image
+        src={quickClean}
+        alt={copy.hero.shotAlt}
+        widths={[800, 1200, 1600]}
+        sizes="(min-width: 1024px) 640px, 100vw"
+        loading="eager"
+        fetchpriority="high"
+        class="ring-line w-full rounded-xl shadow-2xl ring-1 shadow-black/10"
+      />
+      <figcaption class="text-muted mt-3 text-center text-xs">{copy.hero.demoNote}</figcaption>
+    </figure>
+  </section>
+
+  <!-- Vấn đề: giới hạn của chính Zalo -->
+  <section class="border-line bg-surface border-y">
+    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <p class="text-zalo text-sm font-semibold">{copy.problem.eyebrow}</p>
+      <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.problem.title}</h2>
+      <div class="mt-10 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          copy.problem.items.map((p, i) => (
+            <div>
+              <span class="bg-zalo/10 text-zalo inline-flex size-10 items-center justify-center rounded-lg">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d={problemIcons[i]} />
+                </svg>
+              </span>
+              <h3 class="mt-4 font-semibold">{p.title}</h3>
+              <p class="text-muted mt-1.5 leading-relaxed">{p.body}</p>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Tính năng -->
+  <section id="features" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+    <p class="text-reclaim text-sm font-semibold">{copy.features.eyebrow}</p>
+    <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.features.title}</h2>
+
+    <div class="mt-12 space-y-20">
+      {
+        copy.features.shots.map((f, i) => (
+          <div class="grid items-center gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-14">
+            <div class:list={[i % 2 === 1 && "lg:order-2"]}>
+              <h3 class="text-2xl font-bold tracking-tight">{f.title}</h3>
+              <p class="text-muted mt-3 text-lg leading-relaxed">{f.body}</p>
+            </div>
+            <Image
+              src={shots[f.img as keyof typeof shots]}
+              alt={f.alt}
+              widths={[800, 1200, 1600]}
+              sizes={shotSizes}
+              class="ring-line w-full rounded-xl shadow-xl ring-1 shadow-black/10"
+            />
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="mt-20 grid gap-6 sm:grid-cols-3">
+      {
+        copy.features.extras.map((x, i) => (
+          <div class="border-line bg-surface rounded-xl border p-6">
+            <span class="bg-reclaim-soft text-reclaim inline-flex size-10 items-center justify-center rounded-lg">
+              <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d={extraIcons[i]} />
+              </svg>
+            </span>
+            <h3 class="mt-4 font-semibold">{x.title}</h3>
+            <p class="text-muted mt-1.5 leading-relaxed">{x.body}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <!-- An toàn và riêng tư -->
+  <section class="border-line bg-surface border-y">
+    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <p class="text-reclaim text-sm font-semibold">{copy.safety.eyebrow}</p>
+      <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.safety.title}</h2>
+      <div class="mt-10 grid gap-x-8 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {
+          copy.safety.items.map((s, i) => (
+            <div class="flex gap-4">
+              <span class="bg-reclaim-soft text-reclaim inline-flex size-10 shrink-0 items-center justify-center rounded-lg">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d={safetyIcons[i]} />
+                </svg>
+              </span>
+              <div>
+                <h3 class="font-semibold">{s.title}</h3>
+                <p class="text-muted mt-1 leading-relaxed">{s.body}</p>
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Cài đặt -->
+  <section id="install" class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+    <p class="text-reclaim text-sm font-semibold">{copy.install.eyebrow}</p>
+    <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.install.title}</h2>
+    <div class="mt-10 grid gap-12 lg:grid-cols-2 lg:items-start">
+      <ol class="space-y-8">
+        {
+          copy.install.steps.map((s, i) => (
+            <li class="flex gap-4">
+              <span class="bg-fg text-bg figure inline-flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold">{i + 1}</span>
+              <div>
+                <h3 class="font-semibold">{s.title}</h3>
+                <p class="text-muted mt-1 leading-relaxed [&_b]:text-fg [&_b]:font-semibold" set:html={s.body} />
+              </div>
+            </li>
+          ))
+        }
+        <li class="pl-12">
+          <DownloadButton copy={copy} size="md" />
+        </li>
+      </ol>
+      <div class="space-y-5">
+        <SmartScreen copy={copy} />
+        <p class="bg-warn-soft text-fg rounded-xl p-4 text-sm leading-relaxed [&_b]:font-semibold" set:html={copy.install.tip} />
+        <p class="text-muted text-sm">{copy.install.update}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Hỏi đáp -->
+  <section id="faq" class="border-line bg-surface border-t">
+    <div class="mx-auto max-w-3xl px-4 py-20 sm:px-6">
+      <p class="text-reclaim text-sm font-semibold">{copy.faq.eyebrow}</p>
+      <h2 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{copy.faq.title}</h2>
+      <div class="divide-line border-line mt-10 divide-y border-y">
+        {
+          copy.faq.items.map((f) => (
+            <details class="group py-5">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
+                {f.q}
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="text-muted size-5 shrink-0 transition group-open:rotate-45" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </summary>
+              <p
+                class="text-muted mt-3 leading-relaxed [&_a]:text-reclaim [&_a]:underline [&_a]:underline-offset-2 [&_b]:text-fg [&_b]:font-semibold"
+                set:html={f.a}
+              />
+            </details>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="border-line border-t">
+  <div class="text-muted mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <div class="flex items-center gap-3">
+      <Image src={appIcon} alt="" width={28} height={28} class="size-7 rounded-md" />
+      <span><b class="text-fg font-semibold">Zola Cleaner</b> · {copy.footer.tagline}</span>
+    </div>
+    <ul class="flex flex-wrap gap-x-5 gap-y-2">
+      <li><a class="hover:text-fg" href={REPO_URL}>{copy.footer.source}</a></li>
+      <li><a class="hover:text-fg" href={ISSUES_URL}>{copy.footer.issues}</a></li>
+      <li><a class="hover:text-fg" href={`${REPO_URL}/blob/main/LICENSE`}>{copy.footer.license}</a></li>
+      <li>{copy.footer.author}: <a class="hover:text-fg" href="https://github.com/holedev">@holedev</a></li>
+    </ul>
+  </div>
+</footer>

@@ -47,5 +47,9 @@ jobs:
       - name: Typecheck and build frontend
         # generate_context! của Tauri cần thư mục dist khi biên dịch
         run: pnpm --filter @zola-cleaner/desktop build
+      - name: Typecheck and build landing page
+        run: |
+          pnpm --filter @zola-cleaner/site typecheck
+          pnpm --filter @zola-cleaner/site build
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace

@@ -7,6 +7,8 @@
 <p align="center">
   Clean up the photos, videos and documents that <b>Zalo PC</b> downloads to your computer: pick by conversation and age, preview every file, restore anytime.
   <br />
+  <a href="https://holedev.github.io/zola-cleaner/en/"><b>Website</b></a> · <a href="../../releases/latest"><b>Download</b></a>
+  <br />
   <b>English</b> · <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
@@ -85,6 +87,7 @@ pnpm --filter @zola-cleaner/desktop screenshots   # retake docs/screenshots with
 ```
 crates/core      Rust core: Zalo layout detection, scanning, classification, stats, trash, ZIP, document names
 apps/desktop     Tauri v2 app: src-tauri (IPC commands) + src (React, Tailwind, shadcn/ui)
+apps/site        Landing page (Astro + Tailwind), deployed to GitHub Pages (pnpm --filter @zola-cleaner/site dev)
 docs/            Plan, Zalo data layout, ADRs (in Vietnamese)
 CONTEXT.md       Glossary used in code and UI (in Vietnamese)
 ```

@@ -1,0 +1,55 @@
+---
+import { getImage } from "astro:assets";
+import appIcon from "../../../desktop/app-icon.png";
+import type { Copy, Lang } from "../lib/i18n";
+import "../styles/global.css";
+
+interface Props {
+  lang: Lang;
+  copy: Copy;
+  /** Trang phụ (ảnh Open Graph): không cho máy tìm kiếm lập chỉ mục. */
+  noindex?: boolean;
+}
+
+const { lang, copy, noindex = false } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const site = Astro.site!;
+const pathOf = (l: Lang) => (l === "vi" ? base : `${base}en/`);
+const canonical = new URL(pathOf(lang), site).href;
+const ogImage = new URL(`${base}og-${lang}.png`, site).href;
+const favicon = await getImage({ src: appIcon, width: 64, height: 64, format: "png" });
+const touchIcon = await getImage({ src: appIcon, width: 180, height: 180, format: "png" });
+---
+
+<!doctype html>
+<html lang={copy.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{copy.title}</title>
+    <meta name="description" content={copy.description} />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="vi" href={new URL(pathOf("vi"), site).href} />
+    <link rel="alternate" hreflang="en" href={new URL(pathOf("en"), site).href} />
+    <link rel="alternate" hreflang="x-default" href={new URL(pathOf("vi"), site).href} />
+    <link rel="icon" type="image/png" href={favicon.src} />
+    <link rel="apple-touch-icon" href={touchIcon.src} />
+    <link rel="sitemap" href={`${base}sitemap-index.xml`} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Zola Cleaner" />
+    <meta property="og:title" content={copy.title} />
+    <meta property="og:description" content={copy.description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content={lang === "vi" ? "vi_VN" : "en_US"} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={copy.ogAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

@@ -7,6 +7,7 @@
 <p align="center">
   Dọn ảnh, video, tài liệu mà <b>Zalo PC</b> tự tải về máy — chọn theo hội thoại và thời gian, xem trước từng file, khôi phục được.
   <br />
+  <a href="https://holedev.github.io/zola-cleaner/"><b>Trang chủ</b></a> · <a href="../../releases/latest"><b>Tải về</b></a>
   <br />
   <a href="README.md">English</a> · <b>Tiếng Việt</b>
 </p>
@@ -84,6 +85,7 @@ pnpm --filter @zola-cleaner/desktop screenshots   # chụp lại docs/screenshot
 ```
 crates/core      Lõi Rust: nhận diện layout Zalo, quét, phân loại, thống kê, thùng rác, ZIP, tên tài liệu
 apps/desktop     App Tauri v2: src-tauri (command IPC) + src (React, Tailwind, shadcn/ui)
+apps/site        Landing page (Astro + Tailwind), deploy lên GitHub Pages (pnpm --filter @zola-cleaner/site dev)
 docs/            Kế hoạch, cấu trúc dữ liệu Zalo, ADR
 CONTEXT.md       Thuật ngữ dùng trong code và giao diện
 ```

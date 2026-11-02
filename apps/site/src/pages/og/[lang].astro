@@ -1,0 +1,39 @@
+---
+// Thẻ ảnh Open Graph 1200×630. scripts/og.mjs chụp trang này thành public/og-<lang>.png.
+import { Image } from "astro:assets";
+import appIcon from "../../../../desktop/app-icon.png";
+import quickClean from "../../../../../docs/screenshots/quick-clean.png";
+import Base from "../../layouts/Base.astro";
+import { type Lang, t } from "../../lib/i18n";
+import { verifiedVersion } from "../../lib/verified";
+
+export function getStaticPaths() {
+  return [{ params: { lang: "vi" } }, { params: { lang: "en" } }];
+}
+
+const lang = Astro.params.lang as Lang;
+const copy = t(lang, verifiedVersion());
+const tagline = lang === "vi" ? "Miễn phí · Mã nguồn mở · Windows" : "Free · Open source · Windows";
+---
+
+<Base lang={lang} copy={copy} noindex>
+  <div class="relative h-[630px] w-[1200px] overflow-hidden bg-[#f5f6f8] text-[#16181d]">
+    <div class="absolute top-16 left-16 w-[560px]">
+      <div class="flex items-center gap-3 text-2xl font-semibold">
+        <Image src={appIcon} alt="" width={56} height={56} class="size-14 rounded-xl" />
+        Zola Cleaner
+      </div>
+      <p class="mt-10 text-[52px] leading-[1.1] font-bold tracking-tight">
+        {copy.hero.title}
+        <span class="block text-[#0e7c70]">{copy.hero.accent}</span>
+      </p>
+      <p class="mt-8 text-2xl text-[#5d636e]">{tagline}</p>
+    </div>
+    <Image
+      src={quickClean}
+      alt=""
+      width={1600}
+      class="absolute top-20 left-[660px] w-[800px] max-w-none rounded-2xl shadow-2xl ring-1 shadow-black/15 ring-[#e1e4ea]"
+    />
+  </div>
+</Base>
