@@ -20,6 +20,10 @@ Curious where Zalo keeps your files and why they take so much space? See [**Wher
 
 > The app's interface is in Vietnamese, since Zalo is used mostly in Vietnam.
 
+<p align="center">
+  <img src="docs/screenshots/quick-clean.png" alt="Quick clean: how much Zalo takes on drive C and how much each suggestion reclaims" width="800" />
+</p>
+
 ## Features
 
 - **Quick clean**: one sentence tells you how much Zalo takes and how much you can get back, e.g. "Photos & videos older than 1 year → reclaim 4.4 GB".
@@ -28,6 +32,16 @@ Curious where Zalo keeps your files and why they take so much space? See [**Wher
 - **Its own trash**: cleaned files stay for 7 days and can be restored to their original places. You can also pack them into a ZIP for Drive or USB and import it back later.
 - **Safe with how Zalo stores files**: one file can appear in several conversations as hardlinks. The app does not count it twice. It also does not remove a file that a conversation you didn't select still uses.
 - Detects Zalo data moved to another drive, and supports several Zalo accounts on the same computer.
+
+## Screenshots
+
+The screenshots use made-up demo data: no real accounts, conversations or photos.
+
+| By conversation | Trash |
+|---|---|
+| ![Conversations with photo thumbnails, documents and cleanable size per chat](docs/screenshots/conversations.png) | ![The app's trash, with restore, ZIP backup and permanent delete](docs/screenshots/trash.png) |
+| **Overview** | |
+| ![Drive type and health, and Zalo data by kind, age and folder](docs/screenshots/overview.png) | |
 
 ## Install
 
@@ -65,6 +79,7 @@ cargo test --workspace       # core tests on a fake Media Store with real hardli
 cargo clippy --workspace --all-targets
 pnpm typecheck
 pnpm build                   # NSIS installer in target/release/bundle/nsis
+pnpm --filter @zola-cleaner/desktop screenshots   # retake docs/screenshots with demo data (needs Chrome or Edge)
 ```
 
 ```

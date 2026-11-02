@@ -15,17 +15,22 @@ const queryClient = new QueryClient({
   },
 });
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <BlockingProvider>
-          <ImageViewerProvider>
-            <App />
-          </ImageViewerProvider>
-        </BlockingProvider>
-        <Toaster richColors position="bottom-right" />
-      </TooltipProvider>
-    </QueryClientProvider>
-  </React.StrictMode>,
+// Chế độ demo (chụp ảnh README): giả lập lõi Rust bằng dữ liệu bịa. Bản build thường không chứa đoạn này.
+const ready = import.meta.env.MODE === "demo" ? import("./demo/mock").then((m) => m.installDemo()) : Promise.resolve();
+
+void ready.then(() =>
+  ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <BlockingProvider>
+            <ImageViewerProvider>
+              <App />
+            </ImageViewerProvider>
+          </BlockingProvider>
+          <Toaster richColors position="bottom-right" />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </React.StrictMode>,
+  ),
 );

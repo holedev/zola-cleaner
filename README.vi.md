@@ -19,6 +19,10 @@ Zola Cleaner cho bạn thấy Zalo đang giữ bao nhiêu, ở hội thoại nà
 
 Muốn biết Zalo cất file ở đâu và vì sao tốn chỗ? Xem [**Zalo PC lưu file của bạn ở đâu?**](ZALO-STORAGE.vi.md)
 
+<p align="center">
+  <img src="docs/screenshots/quick-clean.png" alt="Dọn nhanh: Zalo chiếm bao nhiêu trên ổ C và mỗi gợi ý lấy lại được bao nhiêu" width="800" />
+</p>
+
 ## Tính năng
 
 - **Dọn nhanh**: một câu cho biết Zalo đang chiếm bao nhiêu và dọn được bao nhiêu, ví dụ "Ảnh & video cũ hơn 1 năm → lấy lại 4,4 GB".
@@ -27,6 +31,16 @@ Muốn biết Zalo cất file ở đâu và vì sao tốn chỗ? Xem [**Zalo PC 
 - **Thùng rác riêng**: file đã dọn được giữ 7 ngày và khôi phục đúng chỗ cũ. Có thể nén ZIP để cất lên Drive / USB rồi nhập lại sau.
 - **An toàn với cách Zalo lưu file**: một file có thể nằm ở nhiều hội thoại (hardlink). App không đếm trùng và không dọn file còn dùng ở hội thoại bạn không chọn.
 - Nhận ra dữ liệu Zalo đã chuyển sang ổ khác, và hỗ trợ nhiều tài khoản Zalo trên cùng máy.
+
+## Ảnh giao diện
+
+Ảnh chụp dùng dữ liệu demo bịa ra: không có tài khoản, hội thoại hay ảnh thật nào.
+
+| Theo hội thoại | Thùng rác |
+|---|---|
+| ![Danh sách hội thoại với ảnh thu nhỏ, tài liệu và dung lượng dọn được](docs/screenshots/conversations.png) | ![Thùng rác của app: khôi phục, nén ZIP, xoá vĩnh viễn](docs/screenshots/trash.png) |
+| **Tổng quan** | |
+| ![Loại và sức khoẻ ổ đĩa, dữ liệu Zalo theo loại, tuổi và thư mục](docs/screenshots/overview.png) | |
 
 ## Cài đặt
 
@@ -64,6 +78,7 @@ cargo test --workspace       # test lõi trên Media Store giả có hardlink th
 cargo clippy --workspace --all-targets
 pnpm typecheck
 pnpm build                   # file cài NSIS trong target/release/bundle/nsis
+pnpm --filter @zola-cleaner/desktop screenshots   # chụp lại docs/screenshots bằng dữ liệu demo (cần Chrome hoặc Edge)
 ```
 
 ```

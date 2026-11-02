@@ -63,7 +63,10 @@ export default function App() {
   const invalidate = useInvalidateIndex();
   const qc = useQueryClient();
   const [rootId, setRootId] = useState<number | null>(null);
-  const [tab, setTab] = useState<Tab>("suggestions");
+  // Chế độ demo: chọn màn bằng ?tab= để chụp ảnh README
+  const [tab, setTab] = useState<Tab>(
+    () => (import.meta.env.MODE === "demo" && (new URLSearchParams(location.search).get("tab") as Tab)) || "suggestions",
+  );
   const [cleanup, setCleanup] = useState<CleanupRequest | null>(null);
   const [closeAsk, setCloseAsk] = useState<{ bytes: number; jobIds: number[] } | null>(null);
 
