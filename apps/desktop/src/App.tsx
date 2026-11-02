@@ -29,13 +29,23 @@ import { Sidebar, TAB_TITLE, type Tab } from "@/components/sidebar";
 import { SuggestionsPage } from "@/pages/suggestions";
 
 
-const PHASE: Record<ScanProgress["phase"], string> = {
-  listing: "Đang liệt kê thư mục",
-  reading: "Đang nhận diện file mới",
-  writing: "Đang cập nhật chỉ mục",
-  done: "Xong",
-  failed: "Lỗi",
-};
+/** Lần quét có nhiều file phải nhận diện (thường là lần đầu) → giải thích vì sao lâu. */
+const SLOW_SCAN_FILES = 5000;
+
+const num = (n: number) => n.toLocaleString("vi-VN");
+
+/** "còn khoảng 12 phút" từ tốc độ đo được; chưa đủ dữ liệu → rỗng. */
+function remaining(done: number, total: number, since: { at: number; done: number } | null): string {
+  if (!since || total <= done) return "";
+  const secs = (Date.now() - since.at) / 1000;
+  const rate = (done - since.done) / secs;
+  if (secs < 3 || rate <= 0) return "";
+  const left = (total - done) / rate;
+  if (left < 60) return " · còn dưới 1 phút";
+  if (left < 3600) return ` · còn khoảng ${Math.round(left / 60)} phút`;
+  const h = Math.floor(left / 3600);
+  return ` · còn khoảng ${h} giờ ${Math.round((left - h * 3600) / 60)} phút`;
+}
 
 /** Một dòng giải thích dưới tiêu đề mỗi mục. */
 const TAB_HINT: Record<Tab, string> = {
@@ -72,20 +82,42 @@ export default function App() {
     }
   }, [roots.data, rootId]);
 
-  // Tiến độ quét: event từ Rust → hộp thoại chờ
+  // Tiến độ quét: event từ Rust → hộp thoại chờ. Ghi lại lúc bắt đầu mỗi pha để ước lượng thời gian còn lại.
+  const phaseStart = useRef<{ phase: ScanProgress["phase"]; at: number; done: number } | null>(null);
   const showScan = useCallback(
     (p: ScanProgress) => {
       if (p.phase === "done" || p.phase === "failed") {
+        phaseStart.current = null;
         blocking.set(null);
         void invalidate();
         return;
       }
-      const toRead = p.newFiles + p.changed;
-      blocking.set({
-        title: "Đang quét media Zalo…",
-        detail: `${PHASE[p.phase]} · ${p.seen.toLocaleString("vi-VN")} file · ${formatBytes(p.bytes)}`,
-        percent: p.phase === "reading" && toRead > 0 ? (p.read / toRead) * 100 : undefined,
-      });
+      const done = p.phase === "reading" ? p.read : p.phase === "writing" ? p.written : 0;
+      if (phaseStart.current?.phase !== p.phase) phaseStart.current = { phase: p.phase, at: Date.now(), done };
+      const since = phaseStart.current;
+      const title = "Đang quét media Zalo…";
+      if (p.phase === "listing") {
+        blocking.set({
+          title,
+          detail: `Đang liệt kê thư mục · đã thấy ${num(p.seen)} file · ${formatBytes(p.bytes)}`,
+        });
+      } else if (p.phase === "reading") {
+        blocking.set({
+          title,
+          detail: `Đang nhận diện file: ${num(p.read)} / ${num(p.toRead)}${remaining(p.read, p.toRead, since)}`,
+          percent: p.toRead > 0 ? (p.read / p.toRead) * 100 : undefined,
+          note:
+            p.toRead >= SLOW_SCAN_FILES
+              ? `Lần quét đầu phải mở từng file trong ${num(p.seen)} file (${formatBytes(p.bytes)}), nên có thể mất khá lâu, nhất là trên ổ HDD. Các lần sau chỉ đọc file mới, nhanh hơn nhiều.`
+              : undefined,
+        });
+      } else {
+        blocking.set({
+          title,
+          detail: `Đang lưu kết quả quét: ${num(p.written)} / ${num(p.toWrite)}${remaining(p.written, p.toWrite, since)}`,
+          percent: p.toWrite > 0 ? (p.written / p.toWrite) * 100 : undefined,
+        });
+      }
     },
     [blocking, invalidate],
   );

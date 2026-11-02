@@ -48,7 +48,12 @@ export interface ScanProgress {
   seen: number;
   newFiles: number;
   changed: number;
+  /** Số Media Item cần nhận diện trong pha reading. */
+  toRead: number;
   read: number;
+  /** Số bản ghi cần lưu / đã lưu trong pha writing. */
+  toWrite: number;
+  written: number;
   bytes: number;
   errors: number;
 }

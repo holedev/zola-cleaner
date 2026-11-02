@@ -203,7 +203,7 @@ Bản web Node (commit `3ea7fac`) đã xong: quét, Conversation, Preview, Quara
 
 ## 9. Hiệu năng
 
-- Liệt kê thư mục kèm file id (một lời gọi cho cả thư mục, không mở từng file); đọc **64 byte đầu** mỗi Media Item một lần, song song bằng `rayon`.
+- Liệt kê thư mục kèm file id (một lời gọi cho cả thư mục, không mở từng file); đọc **64 byte đầu** mỗi Media Item một lần, tối đa 8 luồng cùng lấy việc từ một hàng đợi xếp theo file id (đỡ nhảy đầu đọc trên HDD).
 - Ghi SQLite theo lô trong một transaction; `journal_mode=WAL`, `synchronous=NORMAL`.
 - Giải mã thumbnail JPEG XL trên pool riêng, cache ra đĩa, gộp request trùng — không bao giờ chặn UI.
 - Cách ly = `rename` trên cùng ổ → gần như tức thời.

@@ -6,9 +6,10 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
-use rayon::prelude::*;
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 
@@ -22,6 +23,16 @@ const CONTAINER_PROBE: usize = 64 * 1024;
 use crate::error::{Error, Result};
 use crate::fsx;
 use crate::layout::{RESCACHE_NAME, parse_link};
+
+/// Số luồng tối đa đọc header cùng lúc. Đủ để SSD và hàng đợi lệnh (NCQ) của HDD có việc,
+/// mà không làm đầu đọc HDD nhảy giữa quá nhiều chỗ.
+const READ_THREADS: usize = 8;
+
+/// Phần số bản ghi MFT trong file id NTFS (16 bit cao là số thứ tự tái sử dụng).
+const FILE_RECORD_MASK: u64 = 0xFFFF_FFFF_FFFF;
+
+/// Khoảng cách tối thiểu giữa hai lần báo tiến độ.
+const EMIT_EVERY: Duration = Duration::from_millis(200);
 
 /// Tên thư mục luôn bỏ qua khi quét.
 pub const SKIP_DIR_NAMES: [&str; 1] = ["_zalo_quarantine"];
@@ -50,8 +61,14 @@ pub struct ScanProgress {
     /// Số Media Item mới / đã đổi.
     pub new_files: u64,
     pub changed: u64,
+    /// Số Media Item cần đọc header trong pha Reading.
+    pub to_read: u64,
     /// Số Media Item đã đọc header trong pha Reading.
     pub read: u64,
+    /// Số bản ghi (Media Item + Link) cần ghi trong pha Writing.
+    pub to_write: u64,
+    /// Số bản ghi đã ghi trong pha Writing.
+    pub written: u64,
     /// Tổng dung lượng các Media Item (không đếm trùng hardlink).
     pub bytes: u64,
     pub errors: u64,
@@ -72,6 +89,7 @@ struct LinkRow {
 
 struct ItemRow {
     key: String,
+    file_id: u64,
     abs: PathBuf,
     size: i64,
     mtime_ms: i64,
@@ -106,7 +124,10 @@ pub fn scan(db: &Db, root_id: i64, opts: &ScanOptions) -> Result<ScanProgress> {
         seen: 0,
         new_files: 0,
         changed: 0,
+        to_read: 0,
         read: 0,
+        to_write: 0,
+        written: 0,
         bytes: 0,
         errors: 0,
     };
@@ -146,7 +167,7 @@ fn run(
     root: &Path,
     p: &mut ScanProgress,
     opts: &ScanOptions,
-    emit: &dyn Fn(&ScanProgress),
+    emit: &(dyn Fn(&ScanProgress) + Sync),
 ) -> Result<u64> {
     let cancelled = || opts.cancel.is_some_and(|c| c.load(Ordering::Relaxed));
     let volume = fsx::volume_serial(root)?;
@@ -173,7 +194,7 @@ fn run(
     let mut items: Vec<ItemRow> = Vec::new();
     let mut index: HashMap<String, usize> = HashMap::new();
     let mut stack = vec![root.to_path_buf()];
-    let mut last_emit = std::time::Instant::now();
+    let mut last_emit = Instant::now();
 
     while let Some(dir) = stack.pop() {
         if cancelled() {
@@ -212,6 +233,7 @@ fn run(
                 let unchanged = same(&key, size, e.mtime_ms);
                 items.push(ItemRow {
                     key: key.clone(),
+                    file_id: e.file_id,
                     abs,
                     size,
                     mtime_ms: e.mtime_ms,
@@ -233,69 +255,86 @@ fn run(
                 msg_ts: info.msg_ts,
             });
         }
-        if last_emit.elapsed().as_millis() > 200 {
-            last_emit = std::time::Instant::now();
+        if last_emit.elapsed() >= EMIT_EVERY {
+            last_emit = Instant::now();
             emit(p);
         }
     }
 
-    // 2. Đọc header song song cho Media Item mới / đổi
+    // 2. Đọc header các Media Item mới / đổi.
+    // Đọc theo thứ tự file id (số bản ghi MFT trên NTFS, gần với thứ tự file được tạo ra) và mọi luồng lấy việc
+    // từ cùng một hàng đợi: các luồng luôn đọc những file gần nhau, đầu đọc HDD đỡ phải nhảy qua lại.
+    let mut todo: Vec<usize> = (0..items.len())
+        .filter(|&i| needs_read(&items[i].key, items[i].size, items[i].mtime_ms))
+        .collect();
+    todo.sort_by_key(|&i| items[i].file_id & FILE_RECORD_MASK);
     p.phase = Phase::Reading;
+    p.to_read = todo.len() as u64;
     emit(p);
+
+    let results: Vec<OnceLock<Detection>> = todo.iter().map(|_| OnceLock::new()).collect();
+    let next = AtomicUsize::new(0);
     let read = AtomicU64::new(0);
     let errors = AtomicU64::new(0);
-    items
-        .par_iter_mut()
-        .filter(|it| needs_read(&it.key, it.size, it.mtime_ms))
-        .for_each(|it| {
-            if cancelled() {
-                return;
-            }
-            match fsx::read_header(&it.abs, HEADER_BYTES) {
-                Ok(h) => {
-                    let ext = it
-                        .abs
-                        .extension()
-                        .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
-                        .unwrap_or_default();
-                    let noise = it.area == "fileNoise";
-                    let mut d = if noise {
-                        detect_noise(&h, &ext)
-                    } else {
-                        detect(&h, &ext)
-                    };
-                    // ZIP / Office: 64 byte đầu chưa đủ biết là Word, Excel hay PowerPoint → đọc thêm đầu + cuối file
-                    if matches!(d.kind.as_str(), "zip" | "office" | "ole")
-                        && let Ok((mut head, tail)) = fsx::read_head_tail(&it.abs, CONTAINER_PROBE)
-                    {
-                        if noise {
-                            unnoise_prefix(&mut head, 0);
+    let last_emit = Mutex::new(Instant::now());
+    let base = p.clone();
+    let workers = std::thread::available_parallelism()
+        .map_or(4, |n| n.get())
+        .clamp(1, READ_THREADS);
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                loop {
+                    if cancelled() {
+                        return;
+                    }
+                    let n = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(&i) = todo.get(n) else { return };
+                    match identify(&items[i]) {
+                        Ok(d) => {
+                            let _ = results[n].set(d);
                         }
-                        if let Some(k) = refine_container(&d.kind, &head, &tail) {
-                            d = Detection {
-                                category: Category::Document,
-                                kind: k.to_owned(),
-                            };
+                        // file bị khoá, đường dẫn hỏng...
+                        Err(_) => {
+                            errors.fetch_add(1, Ordering::Relaxed);
                         }
                     }
-                    it.detection = Some(d);
+                    let done = read.fetch_add(1, Ordering::Relaxed) + 1;
+                    if let Ok(mut t) = last_emit.try_lock()
+                        && t.elapsed() >= EMIT_EVERY
+                    {
+                        *t = Instant::now();
+                        let mut snap = base.clone();
+                        snap.read = done;
+                        snap.errors += errors.load(Ordering::Relaxed);
+                        emit(&snap);
+                    }
                 }
-                Err(_) => {
-                    errors.fetch_add(1, Ordering::Relaxed); // file bị khoá, đường dẫn hỏng...
-                }
-            }
-            read.fetch_add(1, Ordering::Relaxed);
-        });
+            });
+        }
+    });
     if cancelled() {
         return Err(Error::Msg("Đã huỷ quét".into()));
+    }
+    for (n, cell) in results.into_iter().enumerate() {
+        items[todo[n]].detection = cell.into_inner();
     }
     p.read = read.into_inner();
     p.errors += errors.into_inner();
 
     // 3. Ghi chỉ mục trong một transaction
     p.phase = Phase::Writing;
+    p.to_write = (items.len() + links.len()) as u64;
     emit(p);
     let scan_id = p.scan_id;
+    let mut last_emit = Instant::now();
+    let mut wrote = |p: &mut ScanProgress| {
+        p.written += 1;
+        if last_emit.elapsed() >= EMIT_EVERY {
+            last_emit = Instant::now();
+            emit(p);
+        }
+    };
     let missing = tx(db, |t| {
         let mut touch = t.prepare("UPDATE items SET seen_scan_id = ?, status = 'present' WHERE root_id = ? AND file_key = ?")?;
         let mut upsert = t.prepare(
@@ -326,6 +365,7 @@ fn run(
                 }
                 None => {} // mới nhưng đọc header lỗi → lần quét sau thử lại
             }
+            wrote(p);
         }
 
         let mut item_id = t.prepare("SELECT id FROM items WHERE root_id = ? AND file_key = ?")?;
@@ -343,12 +383,14 @@ fn run(
                 .query_row(params![root_id, l.key], |r| r.get(0))
                 .optional()?
             else {
+                wrote(p);
                 continue;
             };
             upsert_link.execute(params![id, root_id, l.rel_path, l.conv_id, scan_id])?;
             if let Some(ts) = l.msg_ts {
                 msg_ts.execute(params![ts, id, ts])?;
             }
+            wrote(p);
         }
 
         t.execute(
@@ -362,4 +404,35 @@ fn run(
         Ok(missing as u64)
     })?;
     Ok(missing)
+}
+
+/// Đọc header một Media Item và nhận diện loại (fileNoise: giải XOR trước).
+fn identify(it: &ItemRow) -> std::io::Result<Detection> {
+    let h = fsx::read_header(&it.abs, HEADER_BYTES)?;
+    let ext = it
+        .abs
+        .extension()
+        .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
+        .unwrap_or_default();
+    let noise = it.area == "fileNoise";
+    let mut d = if noise {
+        detect_noise(&h, &ext)
+    } else {
+        detect(&h, &ext)
+    };
+    // ZIP / Office: 64 byte đầu chưa đủ biết là Word, Excel hay PowerPoint → đọc thêm đầu + cuối file
+    if matches!(d.kind.as_str(), "zip" | "office" | "ole")
+        && let Ok((mut head, tail)) = fsx::read_head_tail(&it.abs, CONTAINER_PROBE)
+    {
+        if noise {
+            unnoise_prefix(&mut head, 0);
+        }
+        if let Some(k) = refine_container(&d.kind, &head, &tail) {
+            d = Detection {
+                category: Category::Document,
+                kind: k.to_owned(),
+            };
+        }
+    }
+    Ok(d)
 }

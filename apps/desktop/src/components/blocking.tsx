@@ -12,6 +12,8 @@ export interface BlockingState {
   detail?: string;
   /** 0–100; không có → thanh chạy vô định. */
   percent?: number;
+  /** Dòng ghi chú nhỏ dưới thanh tiến độ. */
+  note?: string;
 }
 
 interface BlockingApi {
@@ -62,6 +64,7 @@ export function BlockingProvider({ children }: { children: ReactNode }) {
               <div className="bg-primary h-full w-1/3 animate-[indeterminate_1.2s_ease-in-out_infinite] rounded-full" />
             </div>
           )}
+          {state?.note ? <p className="text-muted-foreground text-xs">{state.note}</p> : null}
         </DialogContent>
       </Dialog>
     </Ctx.Provider>

@@ -1091,3 +1091,39 @@ fn don_tai_lieu_theo_dinh_dang() {
     };
     assert!(doc_kind_breakdown(&s.db, &images).unwrap().is_empty());
 }
+
+#[test]
+fn quet_bao_tien_do_nhan_dien_va_ghi() {
+    use std::sync::Mutex;
+    use zc_core::scan::Phase;
+    let s = setup();
+    // Chỉ mục mới trên cùng Media Store → mọi Media Item đều phải đọc header
+    let dir = tempfile::tempdir().unwrap();
+    let db = open_db(&dir.path().join("fresh.db")).unwrap();
+    let root_id = add_root(&db, &s.store, None).unwrap().id;
+    let events = Mutex::new(Vec::new());
+    let on_progress = |p: &zc_core::scan::ScanProgress| events.lock().unwrap().push(p.clone());
+    let done = scan(
+        &db,
+        root_id,
+        &ScanOptions {
+            on_progress: Some(&on_progress),
+            cancel: None,
+        },
+    )
+    .unwrap();
+
+    let events = events.into_inner().unwrap();
+    let reading = events.iter().find(|p| p.phase == Phase::Reading).unwrap();
+    assert_eq!(reading.to_read, 6); // a, b, g, v, d và Thumbnail t
+    let writing = events.iter().find(|p| p.phase == Phase::Writing).unwrap();
+    assert_eq!(writing.to_write, 6 + 13); // Media Item + Link
+    assert_eq!(done.phase, Phase::Done);
+    assert_eq!(done.read, done.to_read);
+    assert_eq!(done.written, done.to_write);
+    let phases: Vec<Phase> = events.iter().map(|p| p.phase).collect();
+    let pos = |ph: Phase| phases.iter().position(|&x| x == ph).unwrap();
+    assert!(pos(Phase::Listing) < pos(Phase::Reading));
+    assert!(pos(Phase::Reading) < pos(Phase::Writing));
+    assert!(pos(Phase::Writing) < pos(Phase::Done));
+}

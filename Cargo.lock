@@ -5686,7 +5686,6 @@ version = "0.1.0"
 dependencies = [
  "image",
  "jxl-oxide",
- "rayon",
  "rusqlite",
  "serde",
  "serde_json",
