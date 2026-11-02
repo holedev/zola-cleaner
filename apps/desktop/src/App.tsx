@@ -1,13 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useQueryClient } from "@tanstack/react-query";
-import { Eye } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useBlocking } from "@/components/blocking";
 import { CleanupDialog, type CleanupRequest } from "@/components/cleanup-dialog";
+import { CompatibilityBanner } from "@/components/compatibility-banner";
 import { ZaloBanner, ZaloStuckBanner } from "@/components/zalo-banner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -201,16 +200,7 @@ export default function App() {
       )}
 
       {health.data?.zaloRunning ? <ZaloBanner /> : health.data?.zaloStuck ? <ZaloStuckBanner count={health.data.zaloStuck} /> : null}
-      {root && root.layout.status === "unsupported" && (
-        <Alert>
-          <Eye />
-          <AlertTitle>Chế độ chỉ xem</AlertTitle>
-          <AlertDescription>
-            Cấu trúc thư mục Zalo trên máy này chưa được kiểm chứng, nên app không dọn để tránh xoá nhầm. Vào Cài đặt, bấm
-            "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển để được hỗ trợ.
-          </AlertDescription>
-        </Alert>
-      )}
+      {root?.exists && <CompatibilityBanner root={root} />}
 
       {tab === "suggestions" && (
         <SuggestionsPage rootId={rootId} readOnly={readOnly} onCleanup={setCleanup} onBrowse={() => setTab("conversations")} />

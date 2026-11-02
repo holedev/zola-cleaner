@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use zc_core::archive::{self, ArchiveResult};
 use zc_core::db::{self, Root};
 use zc_core::filter::CleanupFilter;
-use zc_core::layout::{self, LayoutCheck};
+use zc_core::layout::{self, Compatibility, DbVersion, LayoutCheck, ZaloVersion};
 use zc_core::quarantine::{self, CleanupItems, CleanupPreview, Job, JobOptions, JobResult};
 use zc_core::scan::{ScanOptions, ScanProgress};
 use zc_core::stats::{self, ConversationMonths, ConversationSummary, Stats};
@@ -230,16 +230,26 @@ struct RootInfo {
     root: Root,
     uid: Option<String>,
     layout: LayoutCheck,
+    compatibility: Compatibility,
+    zalo_version: Option<ZaloVersion>,
+    /// Version các CSDL của Zalo (config.json). Chỉ để hiển thị, không ảnh hưởng Compatibility.
+    db_versions: Vec<DbVersion>,
     /// Thư mục còn tồn tại không (Zalo có thể đã chuyển dữ liệu sang ổ khác).
     exists: bool,
 }
 
 fn root_info(root: Root) -> RootInfo {
     let path = PathBuf::from(&root.path);
+    let layout = layout::check_layout(&path);
     RootInfo {
         exists: path.is_dir(),
         uid: layout::account_uid(&path),
-        layout: layout::check_layout(&path),
+        compatibility: layout::check_compatibility(&path, &layout),
+        zalo_version: layout::zalo_version(),
+        db_versions: layout::zalo_config(&path)
+            .map(|c| layout::db_versions(&c))
+            .unwrap_or_default(),
+        layout,
         root,
     }
 }

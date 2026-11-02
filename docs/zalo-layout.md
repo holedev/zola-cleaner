@@ -149,6 +149,16 @@ Zola Cleaner doesn't read these databases and doesn't control Zalo's interface (
 
 If any check fails, the folder can only be viewed. You can export a **structure report** (folder shape, file counts and sizes, with no file names, IDs or contents) and send it in an [issue](https://github.com/holedev/zola-cleaner/issues) so support can be added.
 
+**Zalo version check**: the app also reads which Zalo PC version is installed, from the newest `Zalo-<version>` folder in `%LOCALAPPDATA%\Programs\Zalo` (Zalo keeps old version folders around, and the outer `Zalo.exe` is only a launcher). The version doesn't block cleaning on its own. It only decides whether to warn:
+
+| Level | When | What the app does |
+|---|---|---|
+| Verified | Layout check passes, and Zalo is 26.x and not newer than the last surveyed version (26.10.20) | Cleans normally |
+| Untested | Layout check passes, but Zalo is newer than 26.10.20, has a different first number, or its version can't be read | Cleans, with a warning to clean a little first and check Zalo before emptying the trash |
+| Unsupported | Layout check fails | View only. If Zalo is older, it suggests updating Zalo. If Zalo is newer, it suggests updating Zola Cleaner or sending a structure report |
+
+The database versions in `config.json` (`db_version`) are shown in Settings and included in the structure report, but don't affect the level: Zola Cleaner never reads those databases.
+
 ## Survey numbers
 
 - 63,175 Links → 34,625 Media Items, 13.4 GiB. The first scan takes about 3.5 seconds.

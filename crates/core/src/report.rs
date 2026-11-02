@@ -7,7 +7,10 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::fsx;
-use crate::layout::{LayoutCheck, check_layout};
+use crate::layout::{
+    Compatibility, LayoutCheck, ZaloVersion, check_compatibility, check_layout, zalo_config,
+    zalo_version,
+};
 
 /// Độ sâu thư mục tối đa đưa vào báo cáo (tính từ ZaloDownloads).
 const MAX_DEPTH: usize = 3;
@@ -20,6 +23,9 @@ const TOP_PATTERNS: usize = 5;
 #[serde(rename_all = "camelCase")]
 pub struct StructureReport {
     pub layout: LayoutCheck,
+    pub compatibility: Compatibility,
+    /// Zalo Version đang cài trên máy, nếu đọc được.
+    pub zalo_version: Option<ZaloVersion>,
     /// Vài khoá không nhạy cảm trong ZaloData\config.json.
     pub zalo_config: BTreeMap<String, serde_json::Value>,
     pub tree: DirNode,
@@ -177,19 +183,18 @@ pub fn structure_report(store: &Path) -> StructureReport {
         "db_version",
         "current_bu_ver",
     ];
-    let zalo_config = store
-        .ancestors()
-        .nth(3)
-        .and_then(|z| std::fs::read_to_string(z.join("config.json")).ok())
-        .and_then(|s| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&s).ok())
+    let zalo_config = zalo_config(store)
         .map(|m| {
             m.into_iter()
                 .filter(|(k, _)| SAFE_KEYS.contains(&k.as_str()))
                 .collect()
         })
         .unwrap_or_default();
+    let layout = check_layout(store);
     StructureReport {
-        layout: check_layout(store),
+        compatibility: check_compatibility(store, &layout),
+        zalo_version: zalo_version(),
+        layout,
         zalo_config,
         tree: build(store, "ZaloDownloads".into(), 0),
     }

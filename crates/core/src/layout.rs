@@ -217,20 +217,7 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     }
 
     // ZaloData\config.json: định dạng lưu dữ liệu 5.x (major_version = 5, Zalo PC 26), đã chuyển media sang vị trí mới
-    // ZaloData\config.json nằm cạnh media\ (mặc định) — hoặc vẫn ở %APPDATA%\ZaloData nếu dữ liệu đã chuyển ổ
-    let config = store
-        .ancestors()
-        .nth(3)
-        .map(|zalo_data| zalo_data.join("config.json"))
-        .into_iter()
-        .chain(
-            std::env::var_os("APPDATA").map(|a| Path::new(&a).join("ZaloData").join("config.json")),
-        )
-        .find(|c| c.is_file());
-    match config
-        .and_then(|c| std::fs::read_to_string(c).ok())
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-    {
+    match zalo_config(store) {
         None => reasons.push("Không đọc được ZaloData\\config.json".to_owned()),
         Some(cfg) => {
             let major = cfg.get("major_version").and_then(serde_json::Value::as_i64);
@@ -265,6 +252,171 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     } else {
         LayoutCheck::Unsupported { reasons }
     }
+}
+
+/// `ZaloData\config.json` của Media Store: nằm cạnh `media\` (mặc định) — hoặc vẫn ở `%APPDATA%\ZaloData`
+/// nếu dữ liệu đã chuyển ổ.
+pub fn zalo_config(store: &Path) -> Option<serde_json::Map<String, serde_json::Value>> {
+    store
+        .ancestors()
+        .nth(3)
+        .map(|zalo_data| zalo_data.join("config.json"))
+        .into_iter()
+        .chain(
+            std::env::var_os("APPDATA").map(|a| Path::new(&a).join("ZaloData").join("config.json")),
+        )
+        .find(|c| c.is_file())
+        .and_then(|c| std::fs::read_to_string(c).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+}
+
+/// Version một CSDL của Zalo, theo `db_version` trong config.json. App không đọc các CSDL này; chỉ để hiển thị và báo cáo.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DbVersion {
+    pub name: String,
+    pub version: i64,
+}
+
+/// `db_version` là một chuỗi JSON: `[{"name":"Core","version":12}, …]`.
+pub fn db_versions(config: &serde_json::Map<String, serde_json::Value>) -> Vec<DbVersion> {
+    config
+        .get("db_version")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default()
+}
+
+/// Zalo Version: phiên bản app Zalo PC, ví dụ 26.10.20.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ZaloVersion(pub [u32; 3]);
+
+impl std::fmt::Display for ZaloVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let [a, b, c] = self.0;
+        write!(f, "{a}.{b}.{c}")
+    }
+}
+
+impl serde::Serialize for ZaloVersion {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_str(self)
+    }
+}
+
+impl std::str::FromStr for ZaloVersion {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, ()> {
+        let mut parts = s.split('.').map(|p| {
+            if all_digits(p) {
+                p.parse::<u32>().map_err(|_| ())
+            } else {
+                Err(())
+            }
+        });
+        let v = [
+            parts.next().ok_or(())??,
+            parts.next().ok_or(())??,
+            parts.next().ok_or(())??,
+        ];
+        if parts.next().is_some() {
+            return Err(());
+        }
+        Ok(Self(v))
+    }
+}
+
+/// Verified Version: Zalo Version mới nhất đã khảo sát (docs/zalo-layout.md). Khảo sát bản mới → sửa ở đây rồi phát hành.
+pub const VERIFIED_VERSION: ZaloVersion = ZaloVersion([26, 10, 20]);
+
+/// Zalo Version trong thư mục cài đặt: Zalo giữ mỗi bản một thư mục `Zalo-<ver>` (không xoá bản cũ) → lấy bản cao nhất.
+pub fn zalo_version_in(install_dir: &Path) -> Option<ZaloVersion> {
+    std::fs::read_dir(install_dir)
+        .ok()?
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter_map(|e| e.file_name().to_str()?.strip_prefix("Zalo-")?.parse().ok())
+        .max()
+}
+
+/// Zalo Version đang cài trên máy (`%LOCALAPPDATA%\Programs\Zalo`), nếu đọc được.
+pub fn zalo_version() -> Option<ZaloVersion> {
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    zalo_version_in(&Path::new(&local).join("Programs").join("Zalo"))
+}
+
+/// Compatibility của một Media Store: Supported Layout là cổng chặn, Zalo Version chỉ là tín hiệu thêm.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase", tag = "status")]
+pub enum Compatibility {
+    /// Đã kiểm chứng: dọn bình thường.
+    Verified,
+    /// Chưa kiểm chứng: cấu trúc vẫn khớp nên dọn được, kèm cảnh báo.
+    Untested {
+        reason: UntestedReason,
+        verified: ZaloVersion,
+    },
+    /// Không hỗ trợ: chỉ xem.
+    Unsupported { advice: Advice },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum UntestedReason {
+    /// Zalo Version ngoài khoảng đã kiểm chứng: mới hơn Verified Version, hoặc khác số đầu.
+    Unverified,
+    /// Không đọc được Zalo Version.
+    Unknown,
+}
+
+/// Lời khuyên khi Media Store không có Supported Layout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Advice {
+    /// Zalo cũ hơn bản đã kiểm chứng, hoặc chưa chuyển xong media → cập nhật / mở Zalo PC.
+    UpdateZalo,
+    /// Zalo mới hơn bản đã kiểm chứng → chờ bản Zola Cleaner mới hoặc gửi Structure Report.
+    UpdateApp,
+    /// Không rõ vì sao → gửi Structure Report.
+    Report,
+}
+
+/// Kết luận Compatibility từ kết quả kiểm tra cấu trúc và Zalo Version.
+/// `migrate_done`: `migrate_full_done` trong config.json (Zalo đã chuyển xong media sang vị trí mới).
+pub fn compatibility(
+    layout: &LayoutCheck,
+    version: Option<ZaloVersion>,
+    migrate_done: bool,
+) -> Compatibility {
+    let verified = |v: ZaloVersion| v.0[0] == VERIFIED_VERSION.0[0] && v <= VERIFIED_VERSION;
+    if layout.is_supported() {
+        return match version {
+            Some(v) if verified(v) => Compatibility::Verified,
+            Some(_) => Compatibility::Untested {
+                reason: UntestedReason::Unverified,
+                verified: VERIFIED_VERSION,
+            },
+            None => Compatibility::Untested {
+                reason: UntestedReason::Unknown,
+                verified: VERIFIED_VERSION,
+            },
+        };
+    }
+    let advice = match version {
+        _ if !migrate_done => Advice::UpdateZalo,
+        Some(v) if v < VERIFIED_VERSION => Advice::UpdateZalo,
+        Some(v) if !verified(v) => Advice::UpdateApp,
+        _ => Advice::Report,
+    };
+    Compatibility::Unsupported { advice }
+}
+
+/// Compatibility của một Media Store trên máy này.
+pub fn check_compatibility(store: &Path, layout: &LayoutCheck) -> Compatibility {
+    let migrate_done = zalo_config(store)
+        .and_then(|c| c.get("migrate_full_done")?.as_bool())
+        .unwrap_or(false);
+    compatibility(layout, zalo_version(), migrate_done)
 }
 
 /// Tối đa `n` file (không phải `.rescache`) trong các thư mục con cấp 1 của `dir`.
@@ -336,5 +488,80 @@ mod tests {
         assert!(!is_group_conversation("8735000714"));
         assert!(!is_group_conversation("g"));
         assert_eq!(canonical_conv_id("abc_group"), "abc_group");
+    }
+
+    fn v(s: &str) -> ZaloVersion {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn zalo_version_so_sanh_theo_so() {
+        assert!(v("26.9.10") < v("26.10.11"));
+        assert_eq!(v("26.10.20").to_string(), "26.10.20");
+        for bad in ["26.10", "26.10.20.1", "26.x.1", "", "26..1"] {
+            assert!(bad.parse::<ZaloVersion>().is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn compatibility_theo_cau_truc_va_version() {
+        use Compatibility::*;
+        let ok = LayoutCheck::Supported;
+        let bad = LayoutCheck::Unsupported { reasons: vec![] };
+        let untested = |reason| Untested {
+            reason,
+            verified: VERIFIED_VERSION,
+        };
+
+        assert_eq!(compatibility(&ok, Some(VERIFIED_VERSION), true), Verified);
+        assert_eq!(compatibility(&ok, Some(v("26.9.10")), true), Verified);
+        assert_eq!(
+            compatibility(&ok, Some(v("26.10.21")), true),
+            untested(UntestedReason::Unverified)
+        );
+        assert_eq!(
+            compatibility(&ok, Some(v("27.1.1")), true),
+            untested(UntestedReason::Unverified)
+        );
+        assert_eq!(
+            compatibility(&ok, Some(v("25.12.1")), true),
+            untested(UntestedReason::Unverified)
+        );
+        assert_eq!(
+            compatibility(&ok, None, true),
+            untested(UntestedReason::Unknown)
+        );
+
+        let advice = |version, migrate_done| match compatibility(&bad, version, migrate_done) {
+            Unsupported { advice } => advice,
+            c => panic!("phải là Unsupported: {c:?}"),
+        };
+        assert_eq!(advice(Some(v("26.9.10")), true), Advice::UpdateZalo);
+        assert_eq!(advice(Some(v("27.1.1")), false), Advice::UpdateZalo);
+        assert_eq!(advice(Some(v("27.1.1")), true), Advice::UpdateApp);
+        assert_eq!(advice(Some(VERIFIED_VERSION), true), Advice::Report);
+        assert_eq!(advice(None, true), Advice::Report);
+    }
+
+    #[test]
+    fn db_version_la_chuoi_json() {
+        let cfg: serde_json::Map<String, serde_json::Value> = serde_json::from_str(
+            r#"{"db_version":"[{\"name\":\"Core\",\"version\":12},{\"name\":\"Media\",\"version\":2}]"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            db_versions(&cfg),
+            vec![
+                DbVersion {
+                    name: "Core".into(),
+                    version: 12
+                },
+                DbVersion {
+                    name: "Media".into(),
+                    version: 2
+                }
+            ]
+        );
+        assert!(db_versions(&serde_json::Map::new()).is_empty());
     }
 }

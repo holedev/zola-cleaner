@@ -3,6 +3,12 @@ import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export type LayoutCheck = { status: "supported" } | { status: "unsupported"; reasons: string[] };
 
+/** Kết luận cho một Media Store: Supported Layout là cổng chặn, Zalo Version chỉ là tín hiệu thêm. */
+export type Compatibility =
+  | { status: "verified" }
+  | { status: "untested"; reason: "unverified" | "unknown"; verified: string }
+  | { status: "unsupported"; advice: "updateZalo" | "updateApp" | "report" };
+
 export interface RootInfo {
   id: number;
   path: string;
@@ -10,6 +16,11 @@ export interface RootInfo {
   createdAt: number;
   uid: string | null;
   layout: LayoutCheck;
+  compatibility: Compatibility;
+  /** Zalo Version đang cài trên máy, ví dụ "26.10.20". */
+  zaloVersion: string | null;
+  /** Version các CSDL của Zalo, chỉ để hiển thị. */
+  dbVersions: { name: string; version: number }[];
   /** Thư mục còn tồn tại không (Zalo có thể đã chuyển dữ liệu sang ổ khác). */
   exists: boolean;
 }

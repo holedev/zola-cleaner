@@ -16,7 +16,20 @@ _Avoid_: ZaloData (rộng hơn, gồm cả CSDL và cache trình duyệt), root
 **Supported Layout**:
 Cách Zalo sắp xếp một Media Store mà app đã khảo sát và hiểu rõ (hiện chỉ Zalo PC 26 (định dạng lưu dữ liệu 5.x), sau khi chuyển media sang vị trí mới).
 Media Store không có Supported Layout chỉ được xem, không được dọn.
-_Avoid_: version, phiên bản Zalo
+_Avoid_: Compatibility (Supported Layout chỉ nói về cấu trúc, không nói về Zalo Version)
+
+**Zalo Version**:
+Phiên bản ứng dụng Zalo PC đang cài trên máy (ví dụ 26.10.20).
+_Avoid_: định dạng lưu dữ liệu (đó là 5.x, một phần của Supported Layout), version CSDL
+
+**Verified Version**:
+Zalo Version mới nhất mà app đã khảo sát. Mọi Zalo Version cùng số đầu và không mới hơn nó được coi là đã kiểm chứng.
+
+**Compatibility**:
+Kết luận cho một Media Store, dựa trên Supported Layout và Zalo Version: Đã kiểm chứng (dọn bình thường),
+Chưa kiểm chứng (có Supported Layout nhưng Zalo mới hơn Verified Version hoặc không rõ — vẫn dọn được, kèm cảnh báo),
+Không hỗ trợ (không có Supported Layout — chỉ xem).
+_Avoid_: support level, mức hỗ trợ
 
 **Structure Report**:
 Bản mô tả hình dạng một Media Store (thư mục, số file, dung lượng, loại) không chứa tên file, ID hay nội dung,

@@ -482,6 +482,26 @@ fn chi_don_supported_layout() {
 }
 
 #[test]
+fn zalo_version_lay_ban_cao_nhat_trong_thu_muc_cai_dat() {
+    use zc_core::layout::{ZaloVersion, zalo_version_in};
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(zalo_version_in(&dir.path().join("khong-co")), None);
+    assert_eq!(zalo_version_in(dir.path()), None);
+
+    for d in [
+        "Zalo-26.9.10",
+        "Zalo-26.10.20",
+        "Zalo-26.10.11",
+        "Zalo-abc",
+        "resources",
+    ] {
+        fs::create_dir(dir.path().join(d)).unwrap();
+    }
+    fs::write(dir.path().join("Zalo-99.0.0"), b"").unwrap(); // file, không phải thư mục
+    assert_eq!(zalo_version_in(dir.path()), Some(ZaloVersion([26, 10, 20])));
+}
+
+#[test]
 fn purge_khong_dung_toi_thu_muc_cach_ly_cua_job_khac_trung_so() {
     let s = setup();
     // Thư mục của một job cũ (bản app khác / CSDL đã bị xoá) mang cùng số 1

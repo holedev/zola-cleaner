@@ -149,6 +149,16 @@ Zola Cleaner không đọc các CSDL này và không điều khiển giao diện
 
 Thiếu bất kỳ điều nào thì thư mục chỉ được xem. Bạn có thể xuất **báo cáo cấu trúc** (hình dạng thư mục, số file, dung lượng, không có tên file, ID hay nội dung) và gửi kèm một [issue](https://github.com/holedev/zola-cleaner/issues) để được hỗ trợ thêm.
 
+**Kiểm tra phiên bản Zalo**: app còn đọc phiên bản Zalo PC đang cài, từ thư mục `Zalo-<phiên bản>` mới nhất trong `%LOCALAPPDATA%\Programs\Zalo` (Zalo giữ lại thư mục của các bản cũ, còn `Zalo.exe` ở ngoài chỉ là trình khởi chạy). Phiên bản không tự chặn việc dọn, chỉ quyết định có cảnh báo hay không:
+
+| Mức | Khi nào | App làm gì |
+|---|---|---|
+| Đã kiểm chứng | Cấu trúc đạt, Zalo là bản 26.x và không mới hơn bản khảo sát gần nhất (26.10.20) | Dọn bình thường |
+| Chưa kiểm chứng | Cấu trúc đạt, nhưng Zalo mới hơn 26.10.20, khác số đầu, hoặc không đọc được phiên bản | Vẫn dọn, kèm cảnh báo nên dọn ít trước và mở Zalo kiểm tra trước khi dọn sạch thùng rác |
+| Không hỗ trợ | Cấu trúc không đạt | Chỉ xem. Zalo cũ hơn thì khuyên cập nhật Zalo; Zalo mới hơn thì khuyên cập nhật Zola Cleaner hoặc gửi báo cáo cấu trúc |
+
+Phiên bản các CSDL trong `config.json` (`db_version`) được hiện trong Cài đặt và có trong báo cáo cấu trúc, nhưng không ảnh hưởng tới mức: Zola Cleaner không bao giờ đọc các CSDL đó.
+
 ## Số liệu khảo sát
 
 - 63 175 Link → 34 625 Media Item, 13,4 GiB. Quét lần đầu mất khoảng 3,5 giây.

@@ -337,9 +337,13 @@ function AccountCard({
     <Badge variant="outline" className="text-muted-foreground">
       <FolderX /> Không còn ở đây
     </Badge>
-  ) : r.layout.status === "supported" ? (
+  ) : r.compatibility.status === "verified" ? (
     <Badge variant="secondary">
       <CircleCheck /> Dọn được
+    </Badge>
+  ) : r.compatibility.status === "untested" ? (
+    <Badge variant="outline" className="border-amber-400 text-amber-700" title="Cấu trúc khớp, nhưng phiên bản Zalo PC chưa được kiểm chứng">
+      <CircleCheck /> Dọn được · chưa kiểm chứng
     </Badge>
   ) : (
     <Badge variant="outline" className="border-amber-400 text-amber-700">
@@ -368,9 +372,17 @@ function AccountCard({
               <span className="text-amber-700">
                 Thư mục này không còn — có thể bạn đã đổi "Vị trí lưu trữ" của Zalo hoặc tự di chuyển. Bấm Chọn vị trí mới.
               </span>
-            ) : r.layout.status === "unsupported" ? (
-              <span className="text-muted-foreground">{r.layout.reasons.join(" · ")}</span>
-            ) : null
+            ) : (
+              <span className="text-muted-foreground">
+                {[
+                  `Zalo PC ${r.zaloVersion ?? "?"}`,
+                  r.dbVersions.length ? `CSDL ${r.dbVersions.map((d) => `${d.name} ${d.version}`).join(", ")}` : null,
+                  ...(r.layout.status === "unsupported" ? r.layout.reasons : []),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            )
           }
           actions={
             <Button variant={r.exists ? "outline" : "default"} size="sm" onClick={onChangePath}>

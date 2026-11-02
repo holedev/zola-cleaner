@@ -40,7 +40,7 @@ import {
   type JobResult,
 } from "@/lib/api";
 import { describeFilter, describeKept } from "@/lib/describe";
-import { useDebounced, useHealth, useInvalidateIndex, usePreview } from "@/lib/queries";
+import { useDebounced, useHealth, useInvalidateIndex, usePreview, useRoots } from "@/lib/queries";
 import { cn } from "@/lib/utils";
 
 export interface CleanupRequest {
@@ -72,6 +72,7 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
   const zaloRunning = !!health.data?.zaloRunning || !!health.data?.zaloStuck;
   const settings = useQuery({ queryKey: ["settings"], queryFn: api.settings, enabled: request != null });
   const trash = settings.data?.trash.find((t) => t.rootId === request?.filter.rootId);
+  const untested = useRoots().data?.find((r) => r.id === request?.filter.rootId)?.compatibility.status === "untested";
 
   // Mở yêu cầu mới → tick lại tất cả
   useEffect(() => {
@@ -127,6 +128,12 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
                   </div>
                 )}
                 <span>Xem từng file bên dưới. Bỏ tick file nào muốn giữ lại; bấm ảnh để xem lớn, bấm tài liệu để mở.</span>
+                {untested && (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    Phiên bản Zalo PC này chưa được kiểm chứng: file vẫn nằm trong thùng rác 7 ngày và khôi phục được. Mở Zalo kiểm
+                    tra trước khi xoá vĩnh viễn.
+                  </span>
+                )}
               </div>
             </DialogDescription>
           </DialogHeader>
