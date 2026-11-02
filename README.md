@@ -74,6 +74,8 @@ docs/            Plan, Zalo data layout, ADRs (in Vietnamese)
 CONTEXT.md       Glossary used in code and UI (in Vietnamese)
 ```
 
+Agent skills live in `.agents/skills` (pinned in `skills-lock.json`). `.claude/skills` holds relative symlinks to them so Claude Code loads them. On Windows, enable Developer Mode and run `git config --global core.symlinks true` before cloning. Otherwise Git checks the links out as plain text files.
+
 Read first: [`CONTEXT.md`](CONTEXT.md) (glossary), [`docs/zalo-layout.md`](docs/zalo-layout.md) (how Zalo stores files), [`docs/adr/`](docs/adr) (major decisions).
 
 Releasing is automatic. Commits follow [Conventional Commits](https://www.conventionalcommits.org). After CI passes on `main`, [semantic-release](https://semantic-release.gitbook.io) picks the next version from the commits since the last tag: `feat` bumps the minor version, `fix`/`perf` bump the patch version, and `BREAKING CHANGE` bumps the major version. `docs`, `ci`, `chore` and `refactor` don't release anything. GitHub Actions then tags the commit, builds and signs the installer, and publishes the release with generated notes. The version comes from the git tag, so don't edit `version` in the config files by hand.

@@ -73,6 +73,8 @@ docs/            Kế hoạch, cấu trúc dữ liệu Zalo, ADR
 CONTEXT.md       Thuật ngữ dùng trong code và giao diện
 ```
 
+Skill cho agent nằm trong `.agents/skills` (khoá phiên bản ở `skills-lock.json`). `.claude/skills` chứa liên kết tương đối tới đó để Claude Code nạp được. Trên Windows, bật Developer Mode và chạy `git config --global core.symlinks true` trước khi clone. Nếu không, Git sẽ tạo file text thay vì liên kết.
+
 Nên đọc trước: [`CONTEXT.md`](CONTEXT.md) (thuật ngữ), [`docs/zalo-layout.vi.md`](docs/zalo-layout.vi.md) (Zalo lưu file thế nào), [`docs/adr/`](docs/adr) (các quyết định lớn).
 
 Phát hành tự động. Commit theo [Conventional Commits](https://www.conventionalcommits.org). Khi CI trên `main` xanh, [semantic-release](https://semantic-release.gitbook.io) tính version mới từ các commit kể từ tag trước: `feat` tăng minor, `fix`/`perf` tăng patch, `BREAKING CHANGE` tăng major. Commit `docs`, `ci`, `chore`, `refactor` không tạo bản mới. Sau đó GitHub Actions gắn tag, build file cài, ký bản cập nhật và publish Release kèm ghi chú tự sinh. Version lấy từ git tag, nên không cần sửa `version` trong các file cấu hình bằng tay.
