@@ -14,6 +14,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # commitlint cần lịch sử để đọc các commit mới
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -24,6 +27,23 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - name: Lint commit messages
+        # semantic-release tính phiên bản từ message, nên message sai chuẩn phải bị chặn trước khi lên main
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            pnpm exec commitlint --from "$PR_BASE" --to "$PR_HEAD"
+          elif [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            pnpm exec commitlint --from "$BEFORE" --to "$SHA"
+          else
+            pnpm exec commitlint --last
+          fi
       - name: Typecheck and build frontend
         # generate_context! của Tauri cần thư mục dist khi biên dịch
         run: pnpm --filter @zola-cleaner/desktop build
