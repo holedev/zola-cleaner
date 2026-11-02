@@ -14,7 +14,7 @@ Thư mục `ZaloDownloads` của một Account, nơi Zalo lưu media đã tải 
 _Avoid_: ZaloData (rộng hơn, gồm cả CSDL và cache trình duyệt), root
 
 **Supported Layout**:
-Cách Zalo sắp xếp một Media Store mà app đã khảo sát và hiểu rõ (hiện chỉ Zalo 5.x sau khi chuyển media sang vị trí mới).
+Cách Zalo sắp xếp một Media Store mà app đã khảo sát và hiểu rõ (hiện chỉ Zalo PC 26 (định dạng lưu dữ liệu 5.x), sau khi chuyển media sang vị trí mới).
 Media Store không có Supported Layout chỉ được xem, không được dọn.
 _Avoid_: version, phiên bản Zalo
 

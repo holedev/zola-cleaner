@@ -1,4 +1,5 @@
-//! Kiến thức về cấu trúc Media Store (ZaloDownloads) của Zalo PC 5.x. Xem docs/zalo-layout.md.
+//! Kiến thức về cấu trúc Media Store (ZaloDownloads) của Zalo PC 26 (định dạng lưu dữ liệu 5.x,
+//! `major_version` trong config.json). Xem docs/zalo-layout.md.
 //!
 //! ```text
 //!   <area>/<tên>                              Link "kho"
@@ -201,7 +202,7 @@ impl LayoutCheck {
 /// Số file mẫu trong `picture/` dùng để kiểm tra Zalo có tạo hardlink trong `resource/` không.
 const SAMPLE_FILES: usize = 40;
 
-/// Kiểm tra Media Store có đúng cấu trúc Zalo 5.x đã khảo sát (docs/zalo-layout.md) không.
+/// Kiểm tra Media Store có đúng cấu trúc đã khảo sát (docs/zalo-layout.md) không.
 pub fn check_layout(store: &Path) -> LayoutCheck {
     let mut reasons = Vec::new();
     if account_uid(store).is_none()
@@ -215,7 +216,7 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
         }
     }
 
-    // ZaloData\config.json: Zalo 5.x, đã chuyển media sang vị trí mới
+    // ZaloData\config.json: định dạng lưu dữ liệu 5.x (major_version = 5, Zalo PC 26), đã chuyển media sang vị trí mới
     // ZaloData\config.json nằm cạnh media\ (mặc định) — hoặc vẫn ở %APPDATA%\ZaloData nếu dữ liệu đã chuyển ổ
     let config = store
         .ancestors()
@@ -235,7 +236,7 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
             let major = cfg.get("major_version").and_then(serde_json::Value::as_i64);
             if major != Some(5) {
                 reasons.push(format!(
-                    "Zalo phiên bản chính {} (mới hỗ trợ 5)",
+                    "Zalo đang dùng định dạng lưu dữ liệu {}.x, app mới hỗ trợ 5.x (Zalo PC 26)",
                     major.map_or("?".into(), |m| m.to_string())
                 ));
             }

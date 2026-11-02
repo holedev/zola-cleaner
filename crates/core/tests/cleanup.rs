@@ -21,7 +21,7 @@ const MP4: &[u8] = &[
     0, 0, 0, 0x20, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm',
 ];
 
-/// Media Store giả, theo đúng cấu trúc Zalo 5.x:
+/// Media Store giả, theo đúng cấu trúc đã khảo sát (Zalo PC 26, định dạng lưu dữ liệu 5.x):
 ///   a  — ảnh chỉ thuộc hội thoại 111                         (100 B)
 ///   b  — ảnh thuộc 111 và nhóm g222 (Shared Media Item)      (200 B)
 ///   g  — ảnh của nhóm, thư mục kho dùng dạng `222_group`     (50 B)
@@ -474,7 +474,7 @@ fn chi_don_supported_layout() {
     let LayoutCheck::Unsupported { reasons } = check_layout(&store) else {
         panic!("phải bị từ chối")
     };
-    assert_eq!(reasons.len(), 2, "{reasons:?}"); // phiên bản + chưa chuyển media
+    assert_eq!(reasons.len(), 2, "{reasons:?}"); // định dạng lưu dữ liệu + chưa chuyển media
 
     // Media Store giả của các test khác: không đúng vị trí, không có config
     let s = setup();

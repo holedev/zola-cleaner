@@ -34,7 +34,7 @@ Zola Cleaner cho bạn thấy Zalo đang giữ bao nhiêu, ở hội thoại nà
 
 App tự báo khi có bản mới. Bấm **Cập nhật** là tải và cài.
 
-> Yêu cầu: Windows 10/11 64-bit, Zalo PC bản mới (đã chuyển sang cách lưu media mới của Zalo 5.x).
+> Yêu cầu: Windows 10/11 64-bit, Zalo PC 26 (định dạng lưu dữ liệu 5.x), đã chuyển media sang cách lưu mới.
 > Nếu cấu trúc thư mục Zalo trên máy bạn khác với cấu trúc app đã kiểm chứng, app chỉ cho **xem**, không dọn.
 
 ## Dùng thế nào cho an toàn

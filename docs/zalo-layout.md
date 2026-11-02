@@ -4,7 +4,7 @@
 
 This is what Zola Cleaner relies on: where Zalo PC keeps the photos, videos and documents you receive, how it names them, and how it links each file to a conversation. Nothing here comes from Zalo's documentation. It was worked out by looking at the folders on disk and at the interface strings in Zalo PC's own app files, without changing them.
 
-> Surveyed on 2026-11-01 with Zalo PC 26.10.20 (data format 5.x, after Zalo moved media to its new layout), on one Windows machine with one account.
+> Surveyed on 2026-11-01 with Zalo PC 26.10.20, after Zalo moved media to its new layout, on one Windows machine with one account.
 > Other versions or machines may differ. That's why the app checks the layout before it cleans anything (see [What Zola Cleaner touches](#what-zola-cleaner-touches)).
 
 All IDs below (`<uid>`, `1234567890`, `g9876543210`…) are placeholders.
@@ -22,6 +22,7 @@ All IDs below (`<uid>`, `1234567890`, `g9876543210`…) are placeholders.
 └─ Partitions\, Cache\, Code Cache\, GPUCache\ …   Electron / Chromium cache
 ```
 
+- Version: **Zalo PC 26 (data storage format 5.x)**. Zalo shows 26.10.20 under About, and `config.json` records the storage format as `major_version: 5`. Zola Cleaner checks the storage format.
 - `<uid>` is the numeric ID of a Zalo account. Each account signed in on the machine has its own `media\<uid>\ZaloDownloads` folder.
 - `AppData\Local\ZaloPC` didn't exist on the surveyed machine, and `Documents\Zalo Received Files` was empty.
 - Files you save on purpose with "Save to computer" (for example into `D:\Zalo`) are your own copies, not Zalo's cache. Zola Cleaner never touches them.
@@ -143,7 +144,7 @@ Zola Cleaner doesn't read these databases and doesn't control Zalo's interface (
 
 1. The path has the form `…\media\<uid>\ZaloDownloads`.
 2. `picture\` and `resource\` exist.
-3. `config.json` has `major_version` 5 and `migrate_full_done: true`, meaning Zalo finished moving media to the new layout.
+3. `config.json` has storage format 5.x (`major_version: 5`) and `migrate_full_done: true`, meaning Zalo finished moving media to the new layout.
 4. Among up to 40 sample photos in `picture\`, at least one has a hardlink (2 or more Links).
 
 If any check fails, the folder can only be viewed. You can export a **structure report** (folder shape, file counts and sizes, with no file names, IDs or contents) and send it in an [issue](https://github.com/holedev/zola-cleaner/issues) so support can be added.

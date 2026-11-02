@@ -4,7 +4,7 @@
 
 Đây là những gì Zola Cleaner dựa vào: Zalo PC cất ảnh, video, tài liệu bạn nhận được ở đâu, đặt tên thế nào, và gắn mỗi file với hội thoại ra sao. Không có gì ở đây lấy từ tài liệu của Zalo. Tất cả được tìm ra bằng cách xem thư mục trên đĩa và đọc chuỗi giao diện trong file của chính Zalo PC, không sửa gì.
 
-> Khảo sát ngày 2026-11-01 trên Zalo PC 26.10.20 (định dạng dữ liệu 5.x, sau khi Zalo chuyển media sang cách lưu mới), một máy Windows, một tài khoản.
+> Khảo sát ngày 2026-11-01 trên Zalo PC 26.10.20, sau khi Zalo chuyển media sang cách lưu mới, một máy Windows, một tài khoản.
 > Phiên bản hoặc máy khác có thể khác. Vì vậy app luôn kiểm tra cấu trúc trước khi dọn (xem [Zola Cleaner được đụng vào đâu](#zola-cleaner-được-đụng-vào-đâu)).
 
 Mọi ID bên dưới (`<uid>`, `1234567890`, `g9876543210`…) đều là số giả.
@@ -22,6 +22,7 @@ Mọi ID bên dưới (`<uid>`, `1234567890`, `g9876543210`…) đều là số 
 └─ Partitions\, Cache\, Code Cache\, GPUCache\ …   cache của Electron / Chromium
 ```
 
+- Phiên bản: **Zalo PC 26 (định dạng lưu dữ liệu 5.x)**. Mục Thông tin của Zalo hiện 26.10.20, còn `config.json` ghi định dạng lưu dữ liệu là `major_version: 5`. Zola Cleaner kiểm tra định dạng lưu dữ liệu.
 - `<uid>` là ID số của một tài khoản Zalo. Mỗi tài khoản đăng nhập trên máy có thư mục `media\<uid>\ZaloDownloads` riêng.
 - Trên máy khảo sát, `AppData\Local\ZaloPC` không tồn tại, còn `Documents\Zalo Received Files` thì rỗng.
 - File bạn chủ động bấm "Lưu về máy" (ví dụ vào `D:\Zalo`) là bản của bạn, không phải cache của Zalo. Zola Cleaner không bao giờ đụng tới.
@@ -143,7 +144,7 @@ Zola Cleaner không đọc các CSDL này và không điều khiển giao diện
 
 1. Đường dẫn có dạng `…\media\<uid>\ZaloDownloads`.
 2. Có thư mục `picture\` và `resource\`.
-3. `config.json` có `major_version` là 5 và `migrate_full_done: true`, tức Zalo đã chuyển xong media sang cách lưu mới.
+3. `config.json` có định dạng lưu dữ liệu 5.x (`major_version: 5`) và `migrate_full_done: true`, tức Zalo đã chuyển xong media sang cách lưu mới.
 4. Trong tối đa 40 ảnh mẫu ở `picture\`, có ít nhất một ảnh có hardlink (từ 2 Link trở lên).
 
 Thiếu bất kỳ điều nào thì thư mục chỉ được xem. Bạn có thể xuất **báo cáo cấu trúc** (hình dạng thư mục, số file, dung lượng, không có tên file, ID hay nội dung) và gửi kèm một [issue](https://github.com/holedev/zola-cleaner/issues) để được hỗ trợ thêm.

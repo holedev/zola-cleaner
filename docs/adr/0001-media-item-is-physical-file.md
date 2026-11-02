@@ -1,6 +1,6 @@
 # Dọn theo file vật lý, gắn hội thoại qua thư mục `resource/`, không đọc CSDL Zalo
 
-Zalo 5.x lưu mỗi media ở một thư mục "kho" theo loại (`picture/`, `video/`, `fileNoise/`…) và đồng thời tạo hardlink
+Zalo PC 26 (định dạng lưu dữ liệu 5.x) lưu mỗi media ở một thư mục "kho" theo loại (`picture/`, `video/`, `fileNoise/`…) và đồng thời tạo hardlink
 trong `resource/<convId>/…`. Vì thế một đường dẫn không phải là một file: xoá một đường dẫn không giải phóng byte nào,
 và cộng dung lượng theo đường dẫn sẽ đếm trùng. Chúng tôi chọn **Media Item = file vật lý** (định danh bằng NTFS file id),
 mỗi Media Item có nhiều Link; cách ly/khôi phục/xoá luôn xử lý mọi Link cùng lúc. Conversation của một Media Item được suy ra

@@ -8,7 +8,7 @@
 
 ## 1. Bối cảnh & vấn đề
 
-- Zalo PC 5.x lưu dữ liệu ở `%APPDATA%\ZaloData` (~17 GB trên máy khảo sát). Media đã tải nằm ở
+- Zalo PC 26 (định dạng lưu dữ liệu 5.x) lưu dữ liệu ở `%APPDATA%\ZaloData` (~17 GB trên máy khảo sát). Media đã tải nằm ở
   `media\<uid>\ZaloDownloads\` (~15 GB) — đây là **Media Store**, phạm vi dọn duy nhất. Chi tiết: [zalo-layout.vi.md](zalo-layout.vi.md).
 - Tên file là chuỗi băm, thường **không có đuôi file**; tài liệu trong `fileNoise\` còn bị XOR `0x93` → phải nhận diện theo nội dung.
 - Mỗi media có một Link "kho" (`picture\`, `video\`, `fileNoise\`…) và hardlink trong `resource\<convId>\…` → **biết được media thuộc hội thoại nào** mà không cần đọc CSDL Zalo. Xem [ADR 0001](adr/0001-media-item-is-physical-file.md).
