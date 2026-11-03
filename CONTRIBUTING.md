@@ -5,6 +5,8 @@ Thanks for helping. Bug reports, Zalo layouts the app doesn't support yet, and p
 - **Bugs, unsupported Zalo, feature ideas**: pick a form on the [new issue](https://github.com/holedev/zola-cleaner/issues/new/choose) page. Issues can be written in Vietnamese or English.
 - **Security problems**: don't open an issue. See [SECURITY.md](SECURITY.md).
 
+Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Read first
 
 - [`CONTEXT.md`](CONTEXT.md): the glossary used in code and UI (Media Store, Media Item, Link, Quarantine Job, Purge…). Use these words in code, commits and PRs.
