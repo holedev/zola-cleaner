@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Zalo PC lưu file ở đâu? / Where does Zalo PC keep your files?
+    url: https://github.com/holedev/zola-cleaner/blob/main/ZALO-STORAGE.vi.md
+    about: Đọc trước nếu bạn muốn biết vì sao Zalo tốn chỗ và app dọn được những gì.
+  - name: Báo lỗ hổng bảo mật / Report a security vulnerability
+    url: https://github.com/holedev/zola-cleaner/security/advisories/new
+    about: Báo riêng tư, đừng mở issue công khai. Xem SECURITY.md.

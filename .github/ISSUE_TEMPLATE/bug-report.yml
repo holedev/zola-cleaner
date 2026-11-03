@@ -1,0 +1,94 @@
+name: Báo lỗi / Bug report
+description: App chạy sai, báo lỗi, treo, hoặc dọn không như mong đợi.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cảm ơn bạn đã báo lỗi. Nếu app báo **Chỉ xem** hoặc **chưa kiểm chứng** mà không có lỗi gì khác, hãy dùng form "Zalo của tôi chưa được hỗ trợ" thay vì form này.
+
+        **Đừng dán** uid, ID hội thoại, tên file thật, hay ảnh chụp có tên và ảnh của người khác. Issue trên GitHub ai cũng đọc được.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Phiên bản Zola Cleaner
+      description: Xem ở **Cài đặt → Hỗ trợ** (dòng "Phiên bản …").
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: zalo-version
+    attributes:
+      label: Phiên bản Zalo PC
+      description: Xem ở **Cài đặt → Tài khoản Zalo trên máy** (dòng "Zalo PC …").
+      placeholder: "26.10.20"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options:
+        - Windows 11
+        - Windows 10
+        - Khác
+    validations:
+      required: true
+
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: App đang báo gì cho tài khoản Zalo này?
+      description: Nhãn cạnh tài khoản ở **Cài đặt → Tài khoản Zalo trên máy**.
+      options:
+        - Dọn được
+        - Dọn được · chưa kiểm chứng
+        - Chỉ xem
+        - Không rõ / app không mở được
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Chuyện gì đã xảy ra?
+      description: Bạn mong app làm gì, và app đã làm gì thay vào đó. Nếu có thông báo lỗi, chép nguyên văn.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Các bước để gặp lại lỗi
+      placeholder: |
+        1. Mở màn Theo hội thoại
+        2. Chọn 2 hội thoại, lọc "Ảnh cũ hơn 6 tháng"
+        3. Bấm Dọn
+        4. App báo lỗi …
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Nhật ký (khuyến khích)
+      description: |
+        Vào **Cài đặt → Hỗ trợ → Xuất nhật ký**, lưu file rồi kéo thả vào đây. Nhật ký đã được lược đường dẫn và ID.
+        Có nhật ký thì lỗi thường được sửa nhanh hơn nhiều.
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Ảnh chụp màn hình (tuỳ chọn)
+      description: Che tên, ảnh đại diện và nội dung riêng tư trước khi đính kèm.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Riêng tư
+      options:
+        - label: Tôi đã kiểm tra, trong issue này không có uid, ID hội thoại, tên file thật hay ảnh của người khác.
+          required: true
