@@ -72,37 +72,12 @@ The app tells you when a new version is out. Click **Cập nhật** (Update) to 
 
 ## Development
 
-Requirements: Windows, [Rust](https://rustup.rs) ≥ 1.95 (MSVC, with Visual Studio Build Tools), Node.js ≥ 22, pnpm 10 (`corepack enable`).
-
-```bash
-pnpm install
-pnpm dev                     # run the app in dev mode (Tauri + Vite)
-cargo test --workspace       # core tests on a fake Media Store with real hardlinks
-cargo clippy --workspace --all-targets
-pnpm typecheck
-pnpm build                   # NSIS installer in target/release/bundle/nsis
-pnpm --filter @zola-cleaner/desktop screenshots   # retake docs/screenshots with demo data (needs Chrome or Edge)
-```
-
-```
-crates/core      Rust core: Zalo layout detection, scanning, classification, stats, trash, ZIP, document names
-apps/desktop     Tauri v2 app: src-tauri (IPC commands) + src (React, Tailwind, shadcn/ui)
-apps/site        Landing page (Astro + Tailwind), deployed to GitHub Pages (pnpm --filter @zola-cleaner/site dev)
-docs/            Plan, Zalo data layout, ADRs (in Vietnamese)
-CONTEXT.md       Glossary used in code and UI (in Vietnamese)
-```
-
-Agent skills live in `.agents/skills` (pinned in `skills-lock.json`). `.claude/skills` holds relative symlinks to them so Claude Code loads them. On Windows, enable Developer Mode and run `git config --global core.symlinks true` before cloning. Otherwise Git checks the links out as plain text files.
-
-Read first: [`CONTEXT.md`](CONTEXT.md) (glossary), [`docs/zalo-layout.md`](docs/zalo-layout.md) (how Zalo stores files), [`docs/adr/`](docs/adr) (major decisions).
-
-Releasing is automatic. Commits follow [Conventional Commits](https://www.conventionalcommits.org). After CI passes on `main`, [semantic-release](https://semantic-release.gitbook.io) picks the next version from the commits since the last tag: `feat` bumps the minor version, `fix`/`perf` bump the patch version, and `BREAKING CHANGE` bumps the major version. `docs`, `ci`, `chore` and `refactor` don't release anything. GitHub Actions then tags the commit, builds and signs the installer, and publishes the release with generated notes. The version comes from the git tag, so don't edit `version` in the config files by hand.
-
-When writing tests or docs, never use real Zalo uids or conversation IDs. Use fake numbers.
+Built with Rust (core) and Tauri v2 + React (app). Setup, commands, project layout, commit rules and how releases work are in [**CONTRIBUTING.md**](CONTRIBUTING.md).
 
 ## Contact
 
-- Bugs and feature requests: open an [issue](../../issues). If the app says your Zalo layout isn't supported, attach the structure report it exports. The report doesn't contain file names or IDs.
+- Bugs, unsupported Zalo versions and feature ideas: pick a form on the [new issue](../../issues/new/choose) page. If the app says your Zalo isn't supported, the form asks for the structure report the app exports. The report doesn't contain file names or IDs.
+- Security problems: report them privately, see [SECURITY.md](SECURITY.md).
 - Author: [@holedev](https://github.com/holedev)
 
 ## License
