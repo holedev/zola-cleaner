@@ -1,0 +1,90 @@
+name: Zalo của tôi chưa được hỗ trợ / Unsupported Zalo
+description: App báo "Chỉ xem" hoặc "chưa kiểm chứng" cho Zalo trên máy bạn.
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        App chỉ cho dọn khi đã hiểu rõ cách Zalo trên máy bạn sắp xếp file. Báo cáo cấu trúc giúp nhà phát triển hỗ trợ thêm máy của bạn.
+
+        Nếu app vẫn dọn được nhưng **gặp lỗi khi dọn**, hãy dùng form "Báo lỗi".
+
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: App đang báo gì cho tài khoản Zalo này?
+      description: Nhãn cạnh tài khoản ở **Cài đặt → Tài khoản Zalo trên máy**.
+      options:
+        - Chỉ xem
+        - Dọn được · chưa kiểm chứng
+    validations:
+      required: true
+
+  - type: input
+    id: zalo-version
+    attributes:
+      label: Phiên bản Zalo PC
+      description: Xem ở **Cài đặt → Tài khoản Zalo trên máy** (dòng "Zalo PC …"). Nếu app ghi "?", xem trong Zalo PC → Giới thiệu.
+      placeholder: "26.10.20"
+    validations:
+      required: true
+
+  - type: textarea
+    id: structure-report
+    attributes:
+      label: Báo cáo cấu trúc
+      description: |
+        Ở **Cài đặt → Tài khoản Zalo trên máy**, bấm **Xuất báo cáo cấu trúc** cạnh tài khoản đó, lưu file `.json` rồi kéo thả vào đây.
+        Báo cáo chỉ mô tả hình dạng thư mục (số file, dung lượng, loại), không chứa tên file, ID hay nội dung.
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: Phiên bản Zola Cleaner
+      description: Xem ở **Cài đặt → Hỗ trợ** (dòng "Phiên bản …").
+      placeholder: "0.3.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows
+      options:
+        - Windows 11
+        - Windows 10
+        - Khác
+    validations:
+      required: true
+
+  - type: dropdown
+    id: other-drive
+    attributes:
+      label: Dữ liệu Zalo có nằm ở ổ khác ổ C không?
+      description: Ví dụ bạn đã đổi "Vị trí lưu trữ" trong Zalo sang ổ D.
+      options:
+        - Không, vẫn ở ổ C
+        - Có, đã chuyển sang ổ khác
+        - Không rõ
+
+  - type: input
+    id: accounts
+    attributes:
+      label: Trên máy có mấy tài khoản Zalo?
+      placeholder: "1"
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Ghi chú thêm (tuỳ chọn)
+      description: Ví dụ bạn vừa cập nhật Zalo, hoặc vừa đổi vị trí lưu trữ.
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Riêng tư
+      options:
+        - label: Tôi đính kèm file báo cáo cấu trúc mà app xuất ra, không phải ảnh chụp thư mục Zalo (ảnh chụp có thể lộ tên file và ID).
+          required: true

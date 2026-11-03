@@ -1,0 +1,30 @@
+name: Đề xuất tính năng / Feature request
+description: Gợi ý một tính năng mới hoặc cách làm tốt hơn.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Trước khi đề xuất, lưu ý một số giới hạn có chủ đích của app:
+        - App **chỉ làm việc với file Zalo đã tải về máy**. App không đọc tin nhắn hay CSDL của Zalo, không điều khiển Zalo, không gọi máy chủ Zalo, nên không thể tự tải file từ Zalo về.
+        - App **không chạy nền**: mọi việc (kể cả tự xoá thùng rác sau 7 ngày) chỉ diễn ra khi bạn mở app.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Bạn đang gặp vấn đề gì?
+      description: Kể tình huống cụ thể. Ví dụ "Tôi muốn dọn video trong nhóm công ty nhưng giữ lại ảnh".
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Bạn muốn app giải quyết thế nào?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Bạn đã thử cách nào khác chưa? (tuỳ chọn)
