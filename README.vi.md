@@ -70,37 +70,12 @@ App tự báo khi có bản mới. Bấm **Cập nhật** là tải và cài.
 
 ## Phát triển
 
-Cần: Windows, [Rust](https://rustup.rs) ≥ 1.95 (MSVC, kèm Visual Studio Build Tools), Node.js ≥ 22, pnpm 10 (`corepack enable`).
-
-```bash
-pnpm install
-pnpm dev                     # chạy app ở chế độ dev (Tauri + Vite)
-cargo test --workspace       # test lõi trên Media Store giả có hardlink thật
-cargo clippy --workspace --all-targets
-pnpm typecheck
-pnpm build                   # file cài NSIS trong target/release/bundle/nsis
-pnpm --filter @zola-cleaner/desktop screenshots   # chụp lại docs/screenshots bằng dữ liệu demo (cần Chrome hoặc Edge)
-```
-
-```
-crates/core      Lõi Rust: nhận diện layout Zalo, quét, phân loại, thống kê, thùng rác, ZIP, tên tài liệu
-apps/desktop     App Tauri v2: src-tauri (command IPC) + src (React, Tailwind, shadcn/ui)
-apps/site        Landing page (Astro + Tailwind), deploy lên GitHub Pages (pnpm --filter @zola-cleaner/site dev)
-docs/            Kế hoạch, cấu trúc dữ liệu Zalo, ADR
-CONTEXT.md       Thuật ngữ dùng trong code và giao diện
-```
-
-Skill cho agent nằm trong `.agents/skills` (khoá phiên bản ở `skills-lock.json`). `.claude/skills` chứa liên kết tương đối tới đó để Claude Code nạp được. Trên Windows, bật Developer Mode và chạy `git config --global core.symlinks true` trước khi clone. Nếu không, Git sẽ tạo file text thay vì liên kết.
-
-Nên đọc trước: [`CONTEXT.md`](CONTEXT.md) (thuật ngữ), [`docs/zalo-layout.vi.md`](docs/zalo-layout.vi.md) (Zalo lưu file thế nào), [`docs/adr/`](docs/adr) (các quyết định lớn).
-
-Phát hành tự động. Commit theo [Conventional Commits](https://www.conventionalcommits.org). Khi CI trên `main` xanh, [semantic-release](https://semantic-release.gitbook.io) tính version mới từ các commit kể từ tag trước: `feat` tăng minor, `fix`/`perf` tăng patch, `BREAKING CHANGE` tăng major. Commit `docs`, `ci`, `chore`, `refactor` không tạo bản mới. Sau đó GitHub Actions gắn tag, build file cài, ký bản cập nhật và publish Release kèm ghi chú tự sinh. Version lấy từ git tag, nên không cần sửa `version` trong các file cấu hình bằng tay.
-
-Khi viết test hoặc tài liệu, đừng dùng uid hay ID hội thoại Zalo thật. Hãy dùng số giả.
+Lõi viết bằng Rust, app dùng Tauri v2 + React. Cách cài đặt môi trường, các lệnh, cấu trúc thư mục, quy ước commit và cách phát hành nằm trong [**CONTRIBUTING.md**](CONTRIBUTING.md) (tiếng Anh).
 
 ## Liên hệ
 
-- Báo lỗi, góp ý tính năng: mở [issue](../../issues). Nếu app báo cấu trúc Zalo chưa được hỗ trợ, hãy đính kèm báo cáo cấu trúc mà app xuất ra. Báo cáo này không chứa tên file hay ID.
+- Báo lỗi, Zalo chưa được hỗ trợ, góp ý tính năng: chọn form phù hợp ở trang [tạo issue](../../issues/new/choose). Nếu app báo Zalo của bạn chưa được hỗ trợ, form sẽ hướng dẫn đính kèm báo cáo cấu trúc mà app xuất ra. Báo cáo này không chứa tên file hay ID.
+- Lỗ hổng bảo mật: báo riêng tư, xem [SECURITY.md](SECURITY.md).
 - Tác giả: [@holedev](https://github.com/holedev)
 
 ## Giấy phép
