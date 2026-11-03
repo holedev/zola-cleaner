@@ -1,0 +1,41 @@
+# Commits are "chore(deps): …" so semantic-release doesn't cut a release for every bump.
+# Minor and patch bumps are grouped per ecosystem to keep the PR count down; majors come one PR each.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # tauri crates and @tauri-apps/* npm packages must stay on matching versions;
+      # merge the two Tauri PRs together.
+      tauri:
+        patterns: ["tauri", "tauri-*"]
+      cargo-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      tauri:
+        patterns: ["@tauri-apps/*"]
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]

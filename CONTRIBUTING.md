@@ -50,6 +50,8 @@ Pull requests are merged with **rebase merge**, so every commit lands on `main` 
 
 The PR template has a short checklist of things CI can't check. Please fill it in.
 
+Dependabot opens weekly update PRs for Cargo, npm and GitHub Actions. Its commits are `chore(deps)` or `ci`, so they never cut a release on their own. Tauri crates and `@tauri-apps/*` packages come in separate PRs per ecosystem but must stay on matching versions, so merge the two together.
+
 ## Releases
 
 Releasing is automatic. After CI passes on `main`, [semantic-release](https://semantic-release.gitbook.io) picks the next version from the commits since the last tag: `feat` bumps the minor version, `fix`/`perf` bump the patch version, and `BREAKING CHANGE` bumps the major version. `docs`, `ci`, `chore` and `refactor` don't release anything, and neither do commits scoped to `site`. GitHub Actions then tags the commit, builds and signs the installer, and publishes the release with generated notes. The version comes from the git tag, so don't edit `version` in the config files by hand.
