@@ -342,7 +342,11 @@ function AccountCard({
       <CircleCheck /> Dọn được
     </Badge>
   ) : r.compatibility.status === "untested" ? (
-    <Badge variant="outline" className="border-amber-400 text-amber-700" title="Cấu trúc khớp, nhưng phiên bản Zalo PC chưa được kiểm chứng">
+    <Badge variant="outline" className="border-amber-400 text-amber-700" title={
+        r.compatibility.reason === "storageFormat"
+          ? "Cấu trúc khớp, nhưng Zalo PC đã đổi định dạng lưu dữ liệu, chưa được kiểm chứng"
+          : "Cấu trúc khớp, nhưng phiên bản Zalo PC chưa được kiểm chứng"
+      }>
       <CircleCheck /> Dọn được · chưa kiểm chứng
     </Badge>
   ) : (

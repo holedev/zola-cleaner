@@ -6,7 +6,7 @@ export type LayoutCheck = { status: "supported" } | { status: "unsupported"; rea
 /** Kết luận cho một Media Store: Supported Layout là cổng chặn, Zalo Version chỉ là tín hiệu thêm. */
 export type Compatibility =
   | { status: "verified" }
-  | { status: "untested"; reason: "unverified" | "unknown"; verified: string }
+  | { status: "untested"; reason: "unverified" | "unknown" | "storageFormat"; verified: string }
   | { status: "unsupported"; advice: "updateZalo" | "updateApp" | "report" };
 
 export interface RootInfo {
@@ -17,7 +17,7 @@ export interface RootInfo {
   uid: string | null;
   layout: LayoutCheck;
   compatibility: Compatibility;
-  /** Zalo Version đang cài trên máy, ví dụ "26.10.20". */
+  /** Zalo Version đang cài trên máy, ví dụ "26.11.12". */
   zaloVersion: string | null;
   /** Version các CSDL của Zalo, chỉ để hiển thị. */
   dbVersions: { name: string; version: number }[];

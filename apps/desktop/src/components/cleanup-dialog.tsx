@@ -130,7 +130,7 @@ export function CleanupDialog({ request, onClose, onGoToJobs }: Props) {
                 <span>Xem từng file bên dưới. Bỏ tick file nào muốn giữ lại; bấm ảnh để xem lớn, bấm tài liệu để mở.</span>
                 {untested && (
                   <span className="text-amber-700 dark:text-amber-400">
-                    Phiên bản Zalo PC này chưa được kiểm chứng: file vẫn nằm trong thùng rác 7 ngày và khôi phục được. Mở Zalo kiểm
+                    Zalo PC trên máy này chưa được kiểm chứng: file vẫn nằm trong thùng rác 7 ngày và khôi phục được. Mở Zalo kiểm
                     tra trước khi xoá vĩnh viễn.
                   </span>
                 )}

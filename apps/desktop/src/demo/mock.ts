@@ -35,7 +35,7 @@ const ROOT: RootInfo = {
   uid: "1000000000000000001",
   layout: { status: "supported" },
   compatibility: { status: "verified" },
-  zaloVersion: "26.10.20",
+  zaloVersion: "26.11.12",
   dbVersions: [
     { name: "Core", version: 12 },
     { name: "Media", version: 2 },

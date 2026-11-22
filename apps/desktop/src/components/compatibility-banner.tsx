@@ -8,7 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import type { RootInfo } from "@/lib/api";
 
-/** Đã bấm "Đã hiểu" cho Zalo Version nào; Zalo cập nhật sang bản khác thì cảnh báo hiện lại. */
+/** Đã bấm "Đã hiểu" cho Zalo Version và lý do nào; Zalo cập nhật hoặc đổi Storage Format thì cảnh báo hiện lại. */
 const DISMISS_KEY = "zc.untestedZaloVersion";
 
 const zaloName = (v: string | null) => (v ? `Zalo PC ${v}` : "Zalo PC");
@@ -16,12 +16,12 @@ const zaloName = (v: string | null) => (v ? `Zalo PC ${v}` : "Zalo PC");
 export function CompatibilityBanner({ root }: { root: RootInfo }) {
   const c = root.compatibility;
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY));
-  const versionKey = root.zaloVersion ?? "unknown";
+  const versionKey = `${root.zaloVersion ?? "unknown"}|${c.status === "untested" ? c.reason : ""}`;
 
   if (c.status === "unsupported") {
     const advice = {
       updateZalo: `Hãy cập nhật Zalo PC lên bản mới nhất, mở Zalo một lúc để Zalo chuyển xong dữ liệu, rồi mở lại Zola Cleaner.`,
-      updateApp: `${zaloName(root.zaloVersion)} mới hơn bản app đã kiểm chứng và Zalo đã đổi cách lưu file. Vào Cài đặt kiểm tra bản cập nhật của Zola Cleaner, hoặc bấm "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển.`,
+      updateApp: `${zaloName(root.zaloVersion)} mới hơn bản app đã kiểm chứng và cách lưu file trên máy khác với bản đã kiểm chứng. Vào Cài đặt kiểm tra bản cập nhật của Zola Cleaner, hoặc bấm "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển.`,
       report: `Vào Cài đặt, bấm "Xuất báo cáo cấu trúc" và gửi cho nhà phát triển để được hỗ trợ.`,
     }[c.advice];
     return (
@@ -46,7 +46,9 @@ export function CompatibilityBanner({ root }: { root: RootInfo }) {
         <AlertTitle>
           {c.reason === "unknown"
             ? "Không xác định được phiên bản Zalo PC"
-            : `${zaloName(root.zaloVersion)} chưa được kiểm chứng (bản đã kiểm chứng: ${c.verified})`}
+            : c.reason === "storageFormat"
+              ? `${zaloName(root.zaloVersion)} đã đổi định dạng lưu dữ liệu, chưa được kiểm chứng`
+              : `${zaloName(root.zaloVersion)} chưa được kiểm chứng (bản đã kiểm chứng: ${c.verified})`}
         </AlertTitle>
         <AlertDescription className="text-amber-900 dark:text-amber-200">
           <p>
