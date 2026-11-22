@@ -52,7 +52,7 @@ Pull requests are merged with **rebase merge**, so every commit lands on `main` 
 
 The PR template has a short checklist of things CI can't check. Please fill it in.
 
-Dependabot opens weekly update PRs for Cargo, npm and GitHub Actions. Its commits are `chore(deps)` or `ci`, so they never cut a release on their own. Tauri crates and `@tauri-apps/*` packages come in separate PRs per ecosystem but must stay on matching versions, so merge the two together.
+Dependabot opens at most one update PR a month, covering minor and patch releases for Cargo, npm and GitHub Actions together, so Tauri crates and `@tauri-apps/*` packages stay on matching versions. Major upgrades are left to maintainers. Security updates still come as their own PRs right away. Its commits are `chore(deps)`, so they never cut a release on their own.
 
 ## Releases
 
