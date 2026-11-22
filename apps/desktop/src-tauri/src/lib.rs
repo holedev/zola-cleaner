@@ -156,7 +156,8 @@ async fn exclusive<T: Send + 'static>(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Health {
-    version: &'static str,
+    /// Version của app: từ tauri.conf.json, nơi workflow Release ghi version theo git tag (Cargo.toml giữ nguyên 0.1.0).
+    version: String,
     /// Zalo chính đang chạy.
     zalo_running: bool,
     /// Số tiến trình Zalo bị treo (Zalo chính đã thoát nhưng tiến trình con còn sót).
@@ -174,11 +175,11 @@ struct ScanProgressFor {
 }
 
 #[tauri::command]
-async fn health(state: AppStateRef<'_>) -> CmdResult<Health> {
+async fn health(app: AppHandle, state: AppStateRef<'_>) -> CmdResult<Health> {
     let zalo = blocking(|| Ok(safety::zalo_processes())).await?;
     let rt = state.rt.lock().unwrap();
     Ok(Health {
-        version: env!("CARGO_PKG_VERSION"),
+        version: app.package_info().version.to_string(),
         zalo_running: zalo.main,
         zalo_stuck: zalo.stuck.len(),
         scanning: rt
@@ -946,14 +947,20 @@ async fn open_item(app: AppHandle, state: AppStateRef<'_>, item_id: i64) -> CmdR
 // --- Báo cáo / nhật ký ---
 
 #[tauri::command]
-async fn export_report(state: AppStateRef<'_>, root_id: i64, path: String) -> CmdResult<()> {
+async fn export_report(
+    app: AppHandle,
+    state: AppStateRef<'_>,
+    root_id: i64,
+    path: String,
+) -> CmdResult<()> {
     let s = state.inner().clone();
+    let version = app.package_info().version.to_string();
     blocking(move || {
         let root = db::get_root(&s.db()?, root_id)?
             .ok_or_else(|| CmdError::new("user", "Không tìm thấy Media Store"))?;
         let r = report::structure_report(Path::new(&root.path));
         let json = serde_json::to_string_pretty(&serde_json::json!({
-            "app": env!("CARGO_PKG_VERSION"),
+            "app": version,
             "report": r,
         }))
         .map_err(|e| CmdError::new("internal", e.to_string()))?;
