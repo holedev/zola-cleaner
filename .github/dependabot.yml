@@ -1,41 +1,40 @@
-# Commits are "chore(deps): …" so semantic-release doesn't cut a release for every bump.
-# Minor and patch bumps are grouped per ecosystem to keep the PR count down; majors come one PR each.
+# One pull request a month for all version updates: cargo, npm and GitHub Actions together.
+# Dependabot opens it only when something has a new minor or patch release.
+# Majors are left out: upgrade them by hand when you are ready (for example, @types/node follows the Node major in .nvmrc).
+# Security updates don't follow this schedule: they still open a pull request as soon as an advisory is published,
+# and `allow: update-types` doesn't filter them out.
+# Commits are "chore(deps): …" so semantic-release doesn't cut a release for a dependency bump.
 version: 2
+
+multi-ecosystem-groups:
+  dependencies:
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+      include: scope
+
 updates:
   - package-ecosystem: cargo
     directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: chore
-      include: scope
-    groups:
-      # tauri crates and @tauri-apps/* npm packages must stay on matching versions;
-      # merge the two Tauri PRs together.
-      tauri:
-        patterns: ["tauri", "tauri-*"]
-      cargo-minor-patch:
-        update-types: [minor, patch]
+    patterns: ["*"]
+    multi-ecosystem-group: dependencies
+    allow:
+      - dependency-type: all
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: chore
-      include: scope
-    groups:
-      tauri:
-        patterns: ["@tauri-apps/*"]
-      npm-minor-patch:
-        update-types: [minor, patch]
+    patterns: ["*"]
+    multi-ecosystem-group: dependencies
+    allow:
+      - dependency-type: all
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
-    commit-message:
-      prefix: ci
-    groups:
-      actions:
-        patterns: ["*"]
+    patterns: ["*"]
+    multi-ecosystem-group: dependencies
+    allow:
+      - dependency-type: all
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"]
