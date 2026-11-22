@@ -1,13 +1,13 @@
-//! Kiến thức về cấu trúc Media Store (ZaloDownloads) của Zalo PC 26 (định dạng lưu dữ liệu 5.x,
-//! `major_version` trong config.json). Xem docs/zalo-layout.md.
+//! Kiến thức về cấu trúc Media Store (ZaloDownloads) của Zalo PC 26. Xem docs/zalo-layout.md.
 //!
 //! ```text
 //!   <area>/<tên>                              Link "kho"
 //!   picture/<convId | id_group>/<tên>          Link kho của ảnh, đã chia theo hội thoại
-//!   resource/<convId>/<area>/<msgTs>_<uidNgườiGửi>_<convId>_...   hardlink theo hội thoại
+//!   resource/<convId>/<area>/<msgTs>_<uidNgườiGửi>_<convId>_...   Link theo hội thoại
 //!   resource/<convId>/Cache/<msgTs>_<uidTàiKhoản>_<convId>_t|n   Thumbnail (Cache/ cấp kho đặt tên kiểu khác)
 //! ```
-//! convId của nhóm là `g<id>`.
+//! convId của nhóm là `g<id>`. Tài liệu (fileNoise/, file/) có cả Link kho lẫn Link hội thoại (hardlink);
+//! ảnh và video tải từ khoảng 07/2026 chỉ còn Link trong resource/.
 
 use std::path::{Path, PathBuf};
 
@@ -199,10 +199,22 @@ impl LayoutCheck {
     }
 }
 
-/// Số file mẫu trong `picture/` dùng để kiểm tra Zalo có tạo hardlink trong `resource/` không.
+/// Số Link mẫu lấy ra để kiểm tra cách Zalo đặt tên và tạo hardlink.
 const SAMPLE_FILES: usize = 40;
 
+/// Storage Format (định dạng lưu dữ liệu, `major_version` trong config.json) đã khảo sát. Số khác không chặn dọn,
+/// chỉ làm Compatibility thành Chưa kiểm chứng: Zalo từng đổi 5 → 6 mà cấu trúc media không đổi.
+pub const KNOWN_STORAGE_FORMATS: [i64; 2] = [5, 6];
+
+/// Storage Format ghi trong config.json, nếu có.
+pub fn storage_format(config: &serde_json::Map<String, serde_json::Value>) -> Option<i64> {
+    config
+        .get("major_version")
+        .and_then(serde_json::Value::as_i64)
+}
+
 /// Kiểm tra Media Store có đúng cấu trúc đã khảo sát (docs/zalo-layout.md) không.
+/// Storage Format không nằm ở đây: nó chỉ ảnh hưởng Compatibility (xem `compatibility`).
 pub fn check_layout(store: &Path) -> LayoutCheck {
     let mut reasons = Vec::new();
     if account_uid(store).is_none()
@@ -210,23 +222,11 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     {
         reasons.push("Thư mục không có dạng ...\\media\\<uid>\\ZaloDownloads".to_owned());
     }
-    for dir in ["picture", "resource"] {
-        if !store.join(dir).is_dir() {
-            reasons.push(format!("Thiếu thư mục {dir}\\"));
-        }
-    }
 
-    // ZaloData\config.json: định dạng lưu dữ liệu 5.x (major_version = 5, Zalo PC 26), đã chuyển media sang vị trí mới
+    // ZaloData\config.json: Zalo đã chuyển media sang vị trí mới
     match zalo_config(store) {
         None => reasons.push("Không đọc được ZaloData\\config.json".to_owned()),
         Some(cfg) => {
-            let major = cfg.get("major_version").and_then(serde_json::Value::as_i64);
-            if major != Some(5) {
-                reasons.push(format!(
-                    "Zalo đang dùng định dạng lưu dữ liệu {}.x, app mới hỗ trợ 5.x (Zalo PC 26)",
-                    major.map_or("?".into(), |m| m.to_string())
-                ));
-            }
             if cfg
                 .get("migrate_full_done")
                 .and_then(serde_json::Value::as_bool)
@@ -237,14 +237,31 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
         }
     }
 
-    // Phải thấy ít nhất một ảnh trong picture/ có hardlink (nlink ≥ 2) — đó là cách app gắn ảnh với hội thoại
-    if store.join("picture").is_dir() {
-        let linked = sample_files(&store.join("picture"), SAMPLE_FILES)
+    // Link trong resource/<convId>/<area>/ mang Conversation và Message Time trong tên: app dựa vào đó để chọn theo hội thoại và tuổi
+    let resource = store.join("resource");
+    if !resource.is_dir() {
+        reasons.push("Thiếu thư mục resource\\".to_owned());
+    } else {
+        let names = sample_resource_links(&resource, SAMPLE_FILES);
+        let ok = names
             .iter()
-            .any(|f| crate::fsx::file_key(f).is_ok_and(|(_, n)| n >= 2));
-        if !linked {
-            reasons.push("Không thấy hardlink giữa picture\\ và resource\\".to_owned());
+            .filter(|(conv, name)| is_resource_link_name(conv, name))
+            .count();
+        if names.is_empty() {
+            reasons.push("Chưa có media trong resource\\".to_owned());
+        } else if ok * 10 < names.len() * 9 {
+            reasons.push("Tên file trong resource\\ không đúng dạng đã khảo sát".to_owned());
         }
+    }
+
+    // File ở thư mục kho (nếu có) phải có hardlink sang resource/: đó là cách app gắn file kho với hội thoại
+    let stored = sample_files(&storage_dirs(store), SAMPLE_FILES);
+    if !stored.is_empty()
+        && !stored
+            .iter()
+            .any(|f| crate::fsx::file_key(f).is_ok_and(|(_, n)| n >= 2))
+    {
+        reasons.push("Không thấy hardlink giữa thư mục kho và resource\\".to_owned());
     }
 
     if reasons.is_empty() {
@@ -252,6 +269,60 @@ pub fn check_layout(store: &Path) -> LayoutCheck {
     } else {
         LayoutCheck::Unsupported { reasons }
     }
+}
+
+/// Tên Link trong `resource/<convId>/<area>/`: `<msgTs 13 số>_<uid người gửi>_<convId>`, có thể kèm `_…` hoặc `.ext`.
+fn is_resource_link_name(conv_dir: &str, name: &str) -> bool {
+    if msg_ts(name).is_none() {
+        return false;
+    }
+    let Some((sender, rest)) = name[14..].split_once('_') else {
+        return false;
+    };
+    all_digits(sender)
+        && rest
+            .strip_prefix(conv_dir)
+            .is_some_and(|tail| tail.is_empty() || tail.starts_with(['_', '.']))
+}
+
+/// Tối đa `n` cặp (thư mục hội thoại, tên Link) trong `resource/<convId>/<area>/` với area được phép dọn.
+fn sample_resource_links(resource: &Path, n: usize) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    for conv in subdirs(resource) {
+        let Some(conv_dir) = conv.file_name().and_then(|c| c.to_str()).map(str::to_owned) else {
+            continue;
+        };
+        let dirs: Vec<PathBuf> = CLEANABLE_AREAS.iter().map(|a| conv.join(a)).collect();
+        for f in sample_files(&dirs, n - out.len()) {
+            if let Some(name) = f.file_name().and_then(|s| s.to_str()) {
+                out.push((conv_dir.clone(), name.to_owned()));
+            }
+        }
+        if out.len() >= n {
+            break;
+        }
+    }
+    out
+}
+
+/// Thư mục kho chứa file trực tiếp: `picture/<convId>/`, và `video/`, `fileNoise/`, `file/` cùng thư mục con `group/`.
+fn storage_dirs(store: &Path) -> Vec<PathBuf> {
+    let mut dirs = subdirs(&store.join("picture"));
+    for area in ["video", "fileNoise", "file"] {
+        dirs.push(store.join(area));
+        dirs.push(store.join(area).join("group"));
+    }
+    dirs
+}
+
+fn subdirs(dir: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .map(|e| e.path())
+        .collect()
 }
 
 /// `ZaloData\config.json` của Media Store: nằm cạnh `media\` (mặc định) — hoặc vẫn ở `%APPDATA%\ZaloData`
@@ -286,7 +357,7 @@ pub fn db_versions(config: &serde_json::Map<String, serde_json::Value>) -> Vec<D
         .unwrap_or_default()
 }
 
-/// Zalo Version: phiên bản app Zalo PC, ví dụ 26.10.20.
+/// Zalo Version: phiên bản app Zalo PC, ví dụ 26.11.12.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZaloVersion(pub [u32; 3]);
 
@@ -327,7 +398,7 @@ impl std::str::FromStr for ZaloVersion {
 }
 
 /// Verified Version: Zalo Version mới nhất đã khảo sát (docs/zalo-layout.md). Khảo sát bản mới → sửa ở đây rồi phát hành.
-pub const VERIFIED_VERSION: ZaloVersion = ZaloVersion([26, 10, 20]);
+pub const VERIFIED_VERSION: ZaloVersion = ZaloVersion([26, 11, 12]);
 
 /// Zalo Version trong thư mục cài đặt: Zalo giữ mỗi bản một thư mục `Zalo-<ver>` (không xoá bản cũ) → lấy bản cao nhất.
 pub fn zalo_version_in(install_dir: &Path) -> Option<ZaloVersion> {
@@ -367,6 +438,8 @@ pub enum UntestedReason {
     Unverified,
     /// Không đọc được Zalo Version.
     Unknown,
+    /// Storage Format chưa khảo sát (hoặc không đọc được), dù cấu trúc thư mục vẫn khớp.
+    StorageFormat,
 }
 
 /// Lời khuyên khi Media Store không có Supported Layout.
@@ -383,14 +456,21 @@ pub enum Advice {
 
 /// Kết luận Compatibility từ kết quả kiểm tra cấu trúc và Zalo Version.
 /// `migrate_done`: `migrate_full_done` trong config.json (Zalo đã chuyển xong media sang vị trí mới).
+/// `format`: Storage Format trong config.json. Chưa khảo sát → Chưa kiểm chứng, ưu tiên hơn lý do theo Zalo Version.
 pub fn compatibility(
     layout: &LayoutCheck,
     version: Option<ZaloVersion>,
     migrate_done: bool,
+    format: Option<i64>,
 ) -> Compatibility {
     let verified = |v: ZaloVersion| v.0[0] == VERIFIED_VERSION.0[0] && v <= VERIFIED_VERSION;
     if layout.is_supported() {
+        let known_format = format.is_some_and(|f| KNOWN_STORAGE_FORMATS.contains(&f));
         return match version {
+            _ if !known_format => Compatibility::Untested {
+                reason: UntestedReason::StorageFormat,
+                verified: VERIFIED_VERSION,
+            },
             Some(v) if verified(v) => Compatibility::Verified,
             Some(_) => Compatibility::Untested {
                 reason: UntestedReason::Unverified,
@@ -413,31 +493,28 @@ pub fn compatibility(
 
 /// Compatibility của một Media Store trên máy này.
 pub fn check_compatibility(store: &Path, layout: &LayoutCheck) -> Compatibility {
-    let migrate_done = zalo_config(store)
+    let config = zalo_config(store);
+    let migrate_done = config
+        .as_ref()
         .and_then(|c| c.get("migrate_full_done")?.as_bool())
         .unwrap_or(false);
-    compatibility(layout, zalo_version(), migrate_done)
+    let format = config.as_ref().and_then(storage_format);
+    compatibility(layout, zalo_version(), migrate_done, format)
 }
 
-/// Tối đa `n` file (không phải `.rescache`) trong các thư mục con cấp 1 của `dir`.
-fn sample_files(dir: &Path, n: usize) -> Vec<PathBuf> {
+/// Tối đa `n` file (không phải `.rescache`) nằm ngay trong các thư mục `dirs` (không đi sâu hơn).
+fn sample_files(dirs: &[PathBuf], n: usize) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    let Ok(subdirs) = std::fs::read_dir(dir) else {
-        return out;
-    };
-    for sub in subdirs
-        .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
-    {
-        let Ok(files) = std::fs::read_dir(sub.path()) else {
+    for dir in dirs {
+        let Ok(files) = std::fs::read_dir(dir) else {
             continue;
         };
         for f in files.flatten() {
+            if out.len() >= n {
+                return out;
+            }
             if f.file_name() != RESCACHE_NAME && f.file_type().is_ok_and(|t| t.is_file()) {
                 out.push(f.path());
-                if out.len() >= n {
-                    return out;
-                }
             }
         }
     }
@@ -495,6 +572,31 @@ mod tests {
     }
 
     #[test]
+    fn ten_link_trong_resource() {
+        for (conv, name) in [
+            (
+                "1234567890123456789",
+                "1795000000001_1234567890123456789_1234567890123456789_aaaa1111.jxl",
+            ),
+            (
+                "2345678901234567890",
+                "1795000000002_9876543210987654321_2345678901234567890",
+            ),
+            (
+                "g3456789012345678901",
+                "1795000000003_8765432109876543210_g3456789012345678901_bbbb2222.jxl",
+            ),
+            ("111", "1600000000001_sender_111.jpg"),
+        ] {
+            let ok = conv != "111";
+            assert_eq!(is_resource_link_name(conv, name), ok, "{name}");
+        }
+        assert!(!is_resource_link_name("111", "1600000000001_42_1112_a.jpg"));
+        assert!(!is_resource_link_name("111", "za_a.jpg"));
+        assert!(!is_resource_link_name("111", "1600000000001_42"));
+    }
+
+    #[test]
     fn zalo_version_so_sanh_theo_so() {
         assert!(v("26.9.10") < v("26.10.11"));
         assert_eq!(v("26.10.20").to_string(), "26.10.20");
@@ -513,29 +615,52 @@ mod tests {
             verified: VERIFIED_VERSION,
         };
 
-        assert_eq!(compatibility(&ok, Some(VERIFIED_VERSION), true), Verified);
-        assert_eq!(compatibility(&ok, Some(v("26.9.10")), true), Verified);
         assert_eq!(
-            compatibility(&ok, Some(v("26.10.21")), true),
+            compatibility(&ok, Some(VERIFIED_VERSION), true, Some(5)),
+            Verified
+        );
+        assert_eq!(
+            compatibility(&ok, Some(v("26.9.10")), true, Some(5)),
+            Verified
+        );
+        assert_eq!(
+            compatibility(&ok, Some(v("26.11.13")), true, Some(5)),
             untested(UntestedReason::Unverified)
         );
         assert_eq!(
-            compatibility(&ok, Some(v("27.1.1")), true),
+            compatibility(&ok, Some(v("27.1.1")), true, Some(5)),
             untested(UntestedReason::Unverified)
         );
         assert_eq!(
-            compatibility(&ok, Some(v("25.12.1")), true),
+            compatibility(&ok, Some(v("25.12.1")), true, Some(5)),
             untested(UntestedReason::Unverified)
         );
         assert_eq!(
-            compatibility(&ok, None, true),
+            compatibility(&ok, None, true, Some(5)),
             untested(UntestedReason::Unknown)
         );
 
-        let advice = |version, migrate_done| match compatibility(&bad, version, migrate_done) {
-            Unsupported { advice } => advice,
-            c => panic!("phải là Unsupported: {c:?}"),
-        };
+        // Storage Format: đã khảo sát → như trên; chưa khảo sát hoặc không có → Chưa kiểm chứng, kể cả khi Zalo Version đã kiểm chứng
+        let ver = Some(VERIFIED_VERSION);
+        assert_eq!(compatibility(&ok, ver, true, Some(6)), Verified);
+        assert_eq!(
+            compatibility(&ok, ver, true, Some(7)),
+            untested(UntestedReason::StorageFormat)
+        );
+        assert_eq!(
+            compatibility(&ok, None, true, None),
+            untested(UntestedReason::StorageFormat)
+        );
+        assert!(matches!(
+            compatibility(&bad, ver, true, Some(7)),
+            Unsupported { .. }
+        ));
+
+        let advice =
+            |version, migrate_done| match compatibility(&bad, version, migrate_done, Some(5)) {
+                Unsupported { advice } => advice,
+                c => panic!("phải là Unsupported: {c:?}"),
+            };
         assert_eq!(advice(Some(v("26.9.10")), true), Advice::UpdateZalo);
         assert_eq!(advice(Some(v("27.1.1")), false), Advice::UpdateZalo);
         assert_eq!(advice(Some(v("27.1.1")), true), Advice::UpdateApp);
