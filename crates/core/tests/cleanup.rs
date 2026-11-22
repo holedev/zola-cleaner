@@ -462,7 +462,7 @@ fn chi_don_supported_layout() {
     link(
         &store,
         &a,
-        "resource/111/picture/1600000000001_sender_111_a.jpg",
+        "resource/111/picture/1600000000001_42_111_a.jpg",
     );
     let config = zalo_data.join("config.json");
     fs::write(&config, r#"{"major_version":5,"migrate_full_done":true}"#).unwrap();
@@ -470,15 +470,147 @@ fn chi_don_supported_layout() {
     assert_eq!(account_uid(&store).as_deref(), Some("123456"));
     assert_eq!(check_layout(&store), LayoutCheck::Supported);
 
+    // Storage Format không chặn ở bước này (chỉ ảnh hưởng Compatibility)
+    for format in [6, 7] {
+        fs::write(
+            &config,
+            format!(r#"{{"major_version":{format},"migrate_full_done":true}}"#),
+        )
+        .unwrap();
+        assert_eq!(check_layout(&store), LayoutCheck::Supported, "{format}");
+    }
+
     fs::write(&config, r#"{"major_version":4}"#).unwrap();
     let LayoutCheck::Unsupported { reasons } = check_layout(&store) else {
         panic!("phải bị từ chối")
     };
-    assert_eq!(reasons.len(), 2, "{reasons:?}"); // định dạng lưu dữ liệu + chưa chuyển media
+    assert_eq!(reasons.len(), 1, "{reasons:?}"); // chưa chuyển media
 
     // Media Store giả của các test khác: không đúng vị trí, không có config
     let s = setup();
     assert!(!check_layout(&s.store).is_supported());
+}
+
+/// Media Store dưới ZaloData giả, có config.json đã chuyển xong media.
+fn layout_store() -> (TempDir, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let zalo_data = dir.path().join("ZaloData");
+    let store = zalo_data.join("media").join("123456").join("ZaloDownloads");
+    fs::create_dir_all(store.join("resource")).unwrap();
+    fs::write(
+        zalo_data.join("config.json"),
+        r#"{"major_version":6,"migrate_full_done":true}"#,
+    )
+    .unwrap();
+    (dir, store)
+}
+
+#[test]
+fn supported_layout_khi_anh_chi_co_link_resource() {
+    use zc_core::layout::{LayoutCheck, check_layout};
+    // Từ 07/2026: ảnh, video chỉ có Link trong resource/, không còn picture/; tài liệu vẫn hardlink với fileNoise/
+    let (_dir, store) = layout_store();
+    put(
+        &store,
+        "resource/111/picture/1600000000001_42_111_a.jxl",
+        JPEG,
+        100,
+    );
+    put(
+        &store,
+        "resource/g222/video/1600000000002_42_g222",
+        MP4,
+        100,
+    );
+    let d = put(&store, "fileNoise/abcdef", b"x", 10);
+    link(&store, &d, "resource/111/fileNoise/1600000000003_42_111");
+    assert_eq!(check_layout(&store), LayoutCheck::Supported);
+
+    // Máy mới: chưa có file kho nào → không cần hardlink
+    let (_dir2, fresh) = layout_store();
+    put(
+        &fresh,
+        "resource/111/picture/1600000000001_42_111_a.jxl",
+        JPEG,
+        100,
+    );
+    assert_eq!(check_layout(&fresh), LayoutCheck::Supported);
+}
+
+#[test]
+fn khong_ho_tro_khi_resource_la_hoac_kho_khong_co_hardlink() {
+    use zc_core::layout::{LayoutCheck, check_layout};
+    let reasons = |store: &Path| match check_layout(store) {
+        LayoutCheck::Unsupported { reasons } => reasons,
+        LayoutCheck::Supported => panic!("phải bị từ chối"),
+    };
+
+    // Tên trong resource/ không mang Message Time / Conversation
+    let (_d1, odd) = layout_store();
+    put(&odd, "resource/111/picture/za_a.jpg", JPEG, 100);
+    assert_eq!(reasons(&odd).len(), 1);
+
+    // resource/ trống
+    let (_d2, empty) = layout_store();
+    assert_eq!(reasons(&empty).len(), 1);
+
+    // Có file kho nhưng không file nào có hardlink sang resource/
+    let (_d3, unlinked) = layout_store();
+    put(
+        &unlinked,
+        "resource/111/picture/1600000000001_42_111_a.jxl",
+        JPEG,
+        100,
+    );
+    put(&unlinked, "fileNoise/abcdef", b"x", 10);
+    assert_eq!(reasons(&unlinked).len(), 1);
+}
+
+#[test]
+fn anh_va_video_chi_co_link_resource_van_quet_don_va_khoi_phuc() {
+    // Từ 07/2026: ảnh, video chỉ có Link hội thoại (nlink 1). Ảnh chuyển tiếp là hai file riêng, mỗi hội thoại một bản.
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("ZaloDownloads");
+    let p = put(
+        &store,
+        "resource/111/picture/1600000000001_42_111_a.jxl",
+        JPEG,
+        100,
+    );
+    let fwd = put(
+        &store,
+        "resource/g222/picture/1600000000002_42_g222_a.jxl",
+        JPEG,
+        100,
+    );
+    let v = put(&store, "resource/111/video/1600000000003_42_111", MP4, 400);
+
+    let db = open_db(&dir.path().join("test.db")).unwrap();
+    let root_id = add_root(&db, &store, None).unwrap().id;
+    scan(&db, root_id, &ScanOptions::default()).unwrap();
+    let f = |convs: &[&str]| CleanupFilter {
+        root_id,
+        conv_ids: Some(convs.iter().map(|c| (*c).to_owned()).collect()),
+        ..Default::default()
+    };
+
+    let convs = list_conversations(&db, &f(&[]), 8).unwrap();
+    let c1 = convs.iter().find(|c| c.conv_id == "111").unwrap();
+    assert_eq!((c1.bytes, c1.own_bytes), (500, 500)); // bản ở g222 là Media Item khác, không phải Shared
+    let pv = preview_cleanup(&db, &f(&["111"]), 20).unwrap();
+    assert_eq!((pv.count, pv.bytes, pv.skipped_shared.count), (2, 500, 0));
+
+    let opts = JobOptions {
+        check_zalo: false,
+        ..JobOptions::new(dir.path().join("quarantine"))
+    };
+    let q = quarantine(&db, &f(&["111"]), &opts).unwrap();
+    assert_eq!((q.moved, q.failed, q.bytes), (2, 0, 500));
+    assert!(!p.exists() && !v.exists());
+    assert!(fwd.exists()); // bản của hội thoại khác giữ nguyên
+
+    restore_job(&db, q.job_id, &opts).unwrap();
+    assert!(p.exists() && v.exists());
 }
 
 #[test]
