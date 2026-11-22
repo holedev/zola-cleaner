@@ -1,5 +1,6 @@
 # One pull request a month for all version updates: cargo, npm and GitHub Actions together.
 # Dependabot opens it only when something has a new minor or patch release.
+# Only direct dependencies (for cargo, `all` would also bump transitive crates one by one).
 # Majors are left out: upgrade them by hand when you are ready (for example, @types/node follows the Node major in .nvmrc).
 # Security updates don't follow this schedule: they still open a pull request as soon as an advisory is published,
 # and `allow: update-types` doesn't filter them out.
@@ -20,7 +21,7 @@ updates:
     patterns: ["*"]
     multi-ecosystem-group: dependencies
     allow:
-      - dependency-type: all
+      - dependency-type: direct
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: npm
@@ -28,7 +29,7 @@ updates:
     patterns: ["*"]
     multi-ecosystem-group: dependencies
     allow:
-      - dependency-type: all
+      - dependency-type: direct
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
 
   - package-ecosystem: github-actions
@@ -36,5 +37,5 @@ updates:
     patterns: ["*"]
     multi-ecosystem-group: dependencies
     allow:
-      - dependency-type: all
+      - dependency-type: direct
         update-types: ["version-update:semver-minor", "version-update:semver-patch"]
