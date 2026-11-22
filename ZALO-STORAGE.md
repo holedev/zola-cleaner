@@ -4,7 +4,7 @@
 
 This page explains where Zalo PC saves the photos, videos and documents you receive in chats, why drive C keeps filling up, and which parts can be cleaned.
 
-> Applies to **Zalo PC 26 (data storage format 5.x)** on Windows. Zalo's version info box shows it as "Phiên bản 26.x.x".
+> Applies to **Zalo PC 26 (data storage format 5.x or 6.x)** on Windows. Zalo's version info box shows it as "Phiên bản 26.x.x".
 
 ## Open Zalo's data folder
 

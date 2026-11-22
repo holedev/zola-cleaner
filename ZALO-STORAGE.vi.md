@@ -4,7 +4,7 @@
 
 Trang này giải thích Zalo PC cất ảnh, video, tài liệu bạn nhận qua chat ở đâu trên máy, vì sao ổ C đầy dần, và phần nào dọn được.
 
-> Áp dụng cho **Zalo PC 26 (định dạng lưu dữ liệu 5.x)** trên Windows. Hộp thông tin phiên bản của Zalo sẽ ghi dạng "Phiên bản 26.x.x".
+> Áp dụng cho **Zalo PC 26 (định dạng lưu dữ liệu 5.x hoặc 6.x)** trên Windows. Hộp thông tin phiên bản của Zalo sẽ ghi dạng "Phiên bản 26.x.x".
 
 ## Mở thư mục dữ liệu Zalo
 

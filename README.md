@@ -53,7 +53,7 @@ The screenshots use made-up demo data: no real accounts, conversations or photos
 
 The app tells you when a new version is out. Click **Cập nhật** (Update) to download and install it.
 
-> Requirements: Windows 10/11 64-bit and Zalo PC 26 (data storage format 5.x) that has moved media to its new storage layout.
+> Requirements: Windows 10/11 64-bit and Zalo PC 26 (data storage format 5.x or 6.x) that has moved media to its new storage layout.
 > If the Zalo folder layout on your computer differs from the one the app has verified, the app only lets you **view**, not clean.
 
 ## Using it safely
