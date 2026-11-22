@@ -51,7 +51,7 @@ Muốn biết Zalo cất file ở đâu và vì sao tốn chỗ? Xem [**Zalo PC 
 
 App tự báo khi có bản mới. Bấm **Cập nhật** là tải và cài.
 
-> Yêu cầu: Windows 10/11 64-bit, Zalo PC 26 (định dạng lưu dữ liệu 5.x), đã chuyển media sang cách lưu mới.
+> Yêu cầu: Windows 10/11 64-bit, Zalo PC 26 (định dạng lưu dữ liệu 5.x hoặc 6.x), đã chuyển media sang cách lưu mới.
 > Nếu cấu trúc thư mục Zalo trên máy bạn khác với cấu trúc app đã kiểm chứng, app chỉ cho **xem**, không dọn.
 
 ## Dùng thế nào cho an toàn

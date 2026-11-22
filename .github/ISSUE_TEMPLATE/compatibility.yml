@@ -25,7 +25,7 @@ body:
     attributes:
       label: Phiên bản Zalo PC
       description: Xem ở **Cài đặt → Tài khoản Zalo trên máy** (dòng "Zalo PC …"). Nếu app ghi "?", xem trong Zalo PC → Giới thiệu.
-      placeholder: "26.10.20"
+      placeholder: "26.11.12"
     validations:
       required: true
 

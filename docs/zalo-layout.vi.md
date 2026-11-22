@@ -5,6 +5,7 @@
 Đây là những gì Zola Cleaner dựa vào: Zalo PC cất ảnh, video, tài liệu bạn nhận được ở đâu, đặt tên thế nào, và gắn mỗi file với hội thoại ra sao. Không có gì ở đây lấy từ tài liệu của Zalo. Tất cả được tìm ra bằng cách xem thư mục trên đĩa và đọc chuỗi giao diện trong file của chính Zalo PC, không sửa gì.
 
 > Khảo sát ngày 2026-11-01 trên Zalo PC 26.10.20, sau khi Zalo chuyển media sang cách lưu mới, một máy Windows, một tài khoản.
+> Kiểm tra lại ngày 2026-11-22 trên Zalo PC 26.11.12 (định dạng lưu dữ liệu 6), cùng máy. Cấu trúc thư mục không đổi, nhưng lần này phát hiện từ tháng 7/2026 ảnh và video mới được lưu theo cách khác (xem [Một file, nhiều đường dẫn](#một-file-nhiều-đường-dẫn-hardlink)).
 > Phiên bản hoặc máy khác có thể khác. Vì vậy app luôn kiểm tra cấu trúc trước khi dọn (xem [Zola Cleaner được đụng vào đâu](#zola-cleaner-được-đụng-vào-đâu)).
 
 Mọi ID bên dưới (`<uid>`, `1234567890`, `g9876543210`…) đều là số giả.
@@ -22,7 +23,7 @@ Mọi ID bên dưới (`<uid>`, `1234567890`, `g9876543210`…) đều là số 
 └─ Partitions\, Cache\, Code Cache\, GPUCache\ …   cache của Electron / Chromium
 ```
 
-- Phiên bản: **Zalo PC 26 (định dạng lưu dữ liệu 5.x)**. Mục Thông tin của Zalo hiện 26.10.20, còn `config.json` ghi định dạng lưu dữ liệu là `major_version: 5`. Zola Cleaner kiểm tra định dạng lưu dữ liệu.
+- Phiên bản: **Zalo PC 26**. `config.json` ghi một con số định dạng lưu dữ liệu ở `major_version`: 5 trên bản 26.10.20, rồi 6 từ bản 26.11.x. Đổi từ 5 sang 6 không làm thay đổi gì trong thư mục media. Trong mã của Zalo, con số này đi cùng `db_version`, nên nhiều khả năng nó nói về định dạng dữ liệu và CSDL chứ không phải cấu trúc media. Zola Cleaner hiện con số này và chỉ dùng nó để quyết định có cảnh báo hay không (xem [Zola Cleaner được đụng vào đâu](#zola-cleaner-được-đụng-vào-đâu)).
 - `<uid>` là ID số của một tài khoản Zalo. Mỗi tài khoản đăng nhập trên máy có thư mục `media\<uid>\ZaloDownloads` riêng.
 - Trên máy khảo sát, `AppData\Local\ZaloPC` không tồn tại, còn `Documents\Zalo Received Files` thì rỗng.
 - File bạn chủ động bấm "Lưu về máy" (ví dụ vào `D:\Zalo`) là bản của bạn, không phải cache của Zalo. Zola Cleaner không bao giờ đụng tới.
@@ -48,22 +49,22 @@ Mỗi lần mở, Zola Cleaner tìm trong `%APPDATA%\ZaloData\media` và `<mọi
 
 | Thư mục | Dung lượng | Số file | Nội dung |
 |---|---|---|---|
-| `picture\<convId>\` | 3,7 GB | 18k | Ảnh, tên dạng `z<msgId>_…_<hash>.jxl` hoặc `.jpg`, đã chia theo hội thoại |
-| `fileNoise\` | 5,3 GB | 2,6k | Tài liệu và file khác nhận qua chat, đã bị làm nhiễu (xem [Định dạng file](#định-dạng-file)) |
-| `video\` | 2,0 GB | 408 | Video (MP4), tên là số, không có đuôi |
+| `picture\<convId>\` | 3,7 GB | 18k | Ảnh, tên dạng `z<msgId>_…_<hash>.jxl` hoặc `.jpg`, đã chia theo hội thoại. Không có file mới từ tháng 7/2026 |
+| `fileNoise\` | 6,5 GB | 2,8k | Tài liệu và file khác nhận qua chat, đã bị làm nhiễu (xem [Định dạng file](#định-dạng-file)) |
+| `video\` | 2,0 GB | 406 | Video (MP4), tên là số, không có đuôi. Không có file mới từ tháng 7/2026 |
 | `file\` | 323 MB | 123 | File nhận |
 | `Cache\` | 663 MB | 5,8k | Thumbnail Zalo tự tạo cho ảnh |
 | `richThumb\`, `fileThumb\` | nhỏ | | Ảnh xem trước của link và tài liệu |
 | `voice\`, `zinstant\` | nhỏ | | Tin nhắn thoại, nội dung Zalo Instant |
-| `resource\<convId>\{picture,video,fileNoise,file,Cache,richThumb}\` | thêm 0 byte | 35k | **Hardlink** tới file ở các thư mục trên, xếp theo hội thoại |
+| `resource\<convId>\{picture,video,fileNoise,file,Cache,richThumb,voice}\` | 2,1 GB riêng | 37k | File xếp theo hội thoại: **hardlink** tới file ở các thư mục trên, cùng ảnh và video chỉ nằm ở đây (từ tháng 7/2026) |
 
-Trong `video\` và `fileNoise\`, file của nhóm nằm trong thư mục con `group\`.
+Trong `video\`, `fileNoise\` và `file\`, file của nhóm nằm trong thư mục con `group\`. Dung lượng và số file đo ngày 2026-11-22.
 
 ## Một file, nhiều đường dẫn (hardlink)
 
 Đây là chìa khoá để dọn theo hội thoại mà không cần đọc CSDL của Zalo.
 
-Một ảnh nhận được chỉ được lưu **một lần** trên đĩa, nhưng xuất hiện ở hai đường dẫn trở lên:
+Một file nhận được chỉ được lưu **một lần** trên đĩa, nhưng có thể xuất hiện ở hai đường dẫn trở lên. Đây là cách ảnh được lưu cho tới tháng 7/2026:
 
 ```
 ZaloDownloads\
@@ -73,10 +74,11 @@ ZaloDownloads\
 
 Cả hai là hardlink NTFS tới cùng một file vật lý. Chỉ xoá một đường dẫn thì không giải phóng được byte nào. Theo thuật ngữ của Zola Cleaner ([CONTEXT.md](../CONTEXT.md)), file vật lý là **Media Item**, mỗi đường dẫn là một **Link**.
 
-- Phần lớn file có 2 Link: một đường dẫn kho và một đường dẫn hội thoại.
-- File được chuyển tiếp sang nhiều hội thoại có 3–5 Link, mỗi hội thoại một Link. Đó là **Shared Media Item**: app chỉ dọn khi mọi hội thoại của nó đều được chọn.
-- Một ít file chỉ có 1 Link: không gắn hội thoại nào, hoặc chỉ có đường dẫn `resource\` (xem [Sau khi dọn](#zalo-làm-gì-sau-khi-dọn)).
-- App đếm file vật lý chứ không đếm đường dẫn, nên dung lượng không bao giờ bị đếm trùng. Cả thư mục `resource\` thêm 0 byte.
+- Tài liệu (`fileNoise\`, `file\`), cùng ảnh và video tải trước tháng 7/2026, có 2 Link: một đường dẫn kho và một đường dẫn hội thoại.
+- **Từ đầu tháng 7/2026, ảnh và video chỉ còn đường dẫn hội thoại** (`resource\<convId>\picture\…` hoặc `…\video\…`, 1 Link). Zalo không ghi gì vào `picture\` hay `video\` nữa. Trên máy khảo sát, tới ngày 2026-11-22 có khoảng 3.000 file như vậy, 1,5 GB. Điều này đã đúng từ lúc khảo sát ngày 2026-11-01 nhưng khi đó bị bỏ sót.
+- File được chuyển tiếp sang nhiều hội thoại có 3–5 Link, mỗi hội thoại một Link. Đó là **Shared Media Item**: app chỉ dọn khi mọi hội thoại của nó đều được chọn. Ảnh hoặc video chuyển tiếp từ tháng 7/2026 thì được lưu thành file riêng ở mỗi hội thoại (cùng kích thước, cùng hash trong tên), nên mỗi bản là một Media Item riêng và được dọn theo hội thoại của nó.
+- Một ít file cũ chỉ có 1 Link: không gắn hội thoại nào, hoặc chỉ có đường dẫn `resource\` (xem [Sau khi dọn](#zalo-làm-gì-sau-khi-dọn)).
+- App đếm file vật lý chứ không đếm đường dẫn, nên dung lượng không bao giờ bị đếm trùng. Hardlink trong `resource\` thêm 0 byte. Ảnh và video chỉ nằm trong `resource\` thì có chiếm chỗ (2,1 GB trên máy khảo sát).
 
 ### Tên file và ID hội thoại
 
@@ -117,7 +119,9 @@ Hệ quả:
 
 - Có Zalo Cloud thì dọn ảnh gần như không mất gì. Chỉ ảnh nào bạn mở xem lại mới được tải về và chiếm chỗ lại.
 - **Không có Cloud** thì file cũ có thể đã hết hạn trên máy chủ Zalo (xem bên dưới) và không về được nữa. Vì vậy app giữ file đã dọn trong thùng rác 7 ngày và không bao giờ chọn sẵn tài liệu.
-- Khôi phục sau khi Zalo đã tải lại: nếu file ở đường dẫn cũ cùng nội dung, app thay nó bằng Link tới bản được khôi phục. Nếu khác nội dung, app giữ file của Zalo. Chưa kiểm tra Zalo hiển thị hội thoại ra sao sau khi khôi phục.
+- Khôi phục sau khi Zalo đã tải lại: nếu file ở đường dẫn cũ cùng nội dung, app thay nó bằng Link tới bản được khôi phục. Nếu khác nội dung, app giữ file của Zalo.
+
+Thử lại ngày 2026-11-22 trên Zalo PC 26.11.12, cùng tài khoản: dùng Zola Cleaner dọn khoảng 10 ảnh gần đây và 1 video của một hội thoại, tất cả chỉ có đường dẫn `resource\`. Khi mở hội thoại, Zalo tải lại và hiển thị bình thường. Sau khi khôi phục job (lúc Zalo đóng), Zalo hiển thị hội thoại bình thường.
 
 ## Tự tải và hết hạn file
 
@@ -136,30 +140,32 @@ Zola Cleaner không đọc các CSDL này và không điều khiển giao diện
 
 ## Zola Cleaner được đụng vào đâu
 
-**Được dọn**: file có đường dẫn kho trong `picture\`, `video\`, `fileNoise\` hoặc `file\`, cùng mọi Link `resource\` của nó.
+**Được dọn**: file trong `picture\`, `video\`, `fileNoise\` hoặc `file\`, dù qua đường dẫn kho hay qua `resource\<convId>\{picture,video,fileNoise,file}\`, cùng mọi Link của nó.
 
 **Không bao giờ đụng tới**: `Cache\`, `richThumb\`, `fileThumb\` (thumbnail), `voice\`, `zinstant\`, `.rescache`, `sticker\`, các CSDL, cache Chromium, và mọi thứ nằm ngoài `ZaloDownloads`.
 
-**Kiểm tra cấu trúc được hỗ trợ**: trước khi cho dọn, app kiểm tra thư mục media có giống hệt cấu trúc đã khảo sát ở đây không:
+**Kiểm tra cấu trúc được hỗ trợ**: trước khi cho dọn, app kiểm tra thư mục media có giống cấu trúc đã khảo sát ở đây không:
 
 1. Đường dẫn có dạng `…\media\<uid>\ZaloDownloads`.
-2. Có thư mục `picture\` và `resource\`.
-3. `config.json` có định dạng lưu dữ liệu 5.x (`major_version: 5`) và `migrate_full_done: true`, tức Zalo đã chuyển xong media sang cách lưu mới.
-4. Trong tối đa 40 ảnh mẫu ở `picture\`, có ít nhất một ảnh có hardlink (từ 2 Link trở lên).
+2. Đọc được `config.json` và có `migrate_full_done: true`, tức Zalo đã chuyển xong media sang cách lưu mới.
+3. Có `resource\`, và trong tối đa 40 file mẫu ở `resource\<convId>\{picture,video,fileNoise,file}\`, ít nhất 90% có tên dạng `<msgTs>_<uidNgườiGửi>_<convId>…`. Tên này cho biết hội thoại và tuổi của từng file.
+4. Nếu thư mục kho (`picture\`, `video\`, `fileNoise\`, `file\`) có file, thì trong tối đa 40 file mẫu có ít nhất một file có hardlink (từ 2 Link trở lên). Máy mới cài, các thư mục này còn trống, vẫn đạt.
 
 Thiếu bất kỳ điều nào thì thư mục chỉ được xem. Bạn có thể xuất **báo cáo cấu trúc** (hình dạng thư mục, số file, dung lượng, không có tên file, ID hay nội dung) và gửi kèm một [issue](https://github.com/holedev/zola-cleaner/issues) để được hỗ trợ thêm.
 
-**Kiểm tra phiên bản Zalo**: app còn đọc phiên bản Zalo PC đang cài, từ thư mục `Zalo-<phiên bản>` mới nhất trong `%LOCALAPPDATA%\Programs\Zalo` (Zalo giữ lại thư mục của các bản cũ, còn `Zalo.exe` ở ngoài chỉ là trình khởi chạy). Phiên bản không tự chặn việc dọn, chỉ quyết định có cảnh báo hay không:
+**Kiểm tra phiên bản Zalo và định dạng lưu dữ liệu**: app còn đọc phiên bản Zalo PC đang cài, từ thư mục `Zalo-<phiên bản>` mới nhất trong `%LOCALAPPDATA%\Programs\Zalo` (Zalo giữ lại thư mục của các bản cũ, còn `Zalo.exe` ở ngoài chỉ là trình khởi chạy), và định dạng lưu dữ liệu (`major_version`) trong `config.json`. Cả hai không tự chặn việc dọn, chỉ quyết định có cảnh báo hay không:
 
 | Mức | Khi nào | App làm gì |
 |---|---|---|
-| Đã kiểm chứng | Cấu trúc đạt, Zalo là bản 26.x và không mới hơn bản khảo sát gần nhất (26.10.20) | Dọn bình thường |
-| Chưa kiểm chứng | Cấu trúc đạt, nhưng Zalo mới hơn 26.10.20, khác số đầu, hoặc không đọc được phiên bản | Vẫn dọn, kèm cảnh báo nên dọn ít trước và mở Zalo kiểm tra trước khi dọn sạch thùng rác |
+| Đã kiểm chứng | Cấu trúc đạt, định dạng lưu dữ liệu là số đã khảo sát (5 hoặc 6), và Zalo là bản 26.x không mới hơn bản khảo sát gần nhất (26.11.12) | Dọn bình thường |
+| Chưa kiểm chứng | Cấu trúc đạt, nhưng định dạng lưu dữ liệu là số mới hoặc không có, hoặc Zalo mới hơn 26.11.12, khác số đầu, hay không đọc được phiên bản | Vẫn dọn, kèm cảnh báo nên dọn ít trước và mở Zalo kiểm tra trước khi dọn sạch thùng rác |
 | Không hỗ trợ | Cấu trúc không đạt | Chỉ xem. Zalo cũ hơn thì khuyên cập nhật Zalo; Zalo mới hơn thì khuyên cập nhật Zola Cleaner hoặc gửi báo cáo cấu trúc |
 
 Phiên bản các CSDL trong `config.json` (`db_version`) được hiện trong Cài đặt và có trong báo cáo cấu trúc, nhưng không ảnh hưởng tới mức: Zola Cleaner không bao giờ đọc các CSDL đó.
 
 ## Số liệu khảo sát
+
+Từ lần khảo sát ngày 2026-11-01:
 
 - 63 175 Link → 34 625 Media Item, 13,4 GiB. Quét lần đầu mất khoảng 3,5 giây.
 - 161 hội thoại có media dọn được, sau khi gộp hai dạng ID nhóm.

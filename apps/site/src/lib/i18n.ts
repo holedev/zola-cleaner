@@ -37,7 +37,7 @@ function vi(verified: string) {
       title: "Yêu cầu và giới hạn",
       items: [
         "Windows 10 hoặc 11, bản 64-bit.",
-        `Zalo PC 26 (định dạng lưu dữ liệu 5.x). <b>Đã kiểm chứng</b> tới Zalo PC ${verified}.`,
+        `Zalo PC 26 (định dạng lưu dữ liệu 5.x hoặc 6.x). <b>Đã kiểm chứng</b> tới Zalo PC ${verified}.`,
         "Zalo mới hơn bản đã kiểm chứng: <b>Chưa kiểm chứng</b>, vẫn dọn được nhưng app cảnh báo trước.",
         "Cấu trúc thư mục Zalo khác với bản đã khảo sát: <b>Không hỗ trợ</b>, app chỉ cho xem, không dọn.",
         "App chưa được ký số, nên lần đầu mở Windows sẽ hỏi lại (xem bước cài).",
@@ -193,7 +193,7 @@ function en(verified: string): Copy {
       title: "Requirements and limits",
       items: [
         "Windows 10 or 11, 64-bit.",
-        `Zalo PC 26 (data storage format 5.x). <b>Verified</b> up to Zalo PC ${verified}.`,
+        `Zalo PC 26 (data storage format 5.x or 6.x). <b>Verified</b> up to Zalo PC ${verified}.`,
         "Zalo newer than the verified version: <b>Untested</b>. Cleaning still works, with a warning first.",
         "A Zalo folder layout that differs from the surveyed one: <b>Not supported</b>. The app only shows it and won't clean it.",
         "The app isn't code-signed yet, so Windows asks again the first time you open it (see the install steps).",

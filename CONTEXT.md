@@ -14,20 +14,24 @@ Thư mục `ZaloDownloads` của một Account, nơi Zalo lưu media đã tải 
 _Avoid_: ZaloData (rộng hơn, gồm cả CSDL và cache trình duyệt), root
 
 **Supported Layout**:
-Cách Zalo sắp xếp một Media Store mà app đã khảo sát và hiểu rõ (hiện chỉ Zalo PC 26 (định dạng lưu dữ liệu 5.x), sau khi chuyển media sang vị trí mới).
+Cách Zalo sắp xếp một Media Store mà app đã khảo sát và hiểu rõ (hiện là Zalo PC 26, sau khi chuyển media sang vị trí mới).
 Media Store không có Supported Layout chỉ được xem, không được dọn.
-_Avoid_: Compatibility (Supported Layout chỉ nói về cấu trúc, không nói về Zalo Version)
+_Avoid_: Compatibility (Supported Layout chỉ nói về cấu trúc thư mục, không nói về Zalo Version hay Storage Format)
 
 **Zalo Version**:
-Phiên bản ứng dụng Zalo PC đang cài trên máy (ví dụ 26.10.20).
-_Avoid_: định dạng lưu dữ liệu (đó là 5.x, một phần của Supported Layout), version CSDL
+Phiên bản ứng dụng Zalo PC đang cài trên máy (ví dụ 26.11.12).
+_Avoid_: định dạng lưu dữ liệu (đó là Storage Format), version CSDL
+
+**Storage Format**:
+Con số Zalo ghi kèm dữ liệu trên máy để đánh dấu định dạng lưu dữ liệu (đã khảo sát: 5 và 6). Đổi số không có nghĩa là cấu trúc media đổi.
+_Avoid_: Zalo Version, version CSDL, định dạng media
 
 **Verified Version**:
 Zalo Version mới nhất mà app đã khảo sát. Mọi Zalo Version cùng số đầu và không mới hơn nó được coi là đã kiểm chứng.
 
 **Compatibility**:
-Kết luận cho một Media Store, dựa trên Supported Layout và Zalo Version: Đã kiểm chứng (dọn bình thường),
-Chưa kiểm chứng (có Supported Layout nhưng Zalo mới hơn Verified Version hoặc không rõ — vẫn dọn được, kèm cảnh báo),
+Kết luận cho một Media Store, dựa trên Supported Layout, Storage Format và Zalo Version: Đã kiểm chứng (dọn bình thường),
+Chưa kiểm chứng (có Supported Layout nhưng Storage Format chưa khảo sát, hoặc Zalo mới hơn Verified Version hay không rõ — vẫn dọn được, kèm cảnh báo),
 Không hỗ trợ (không có Supported Layout — chỉ xem).
 _Avoid_: support level, mức hỗ trợ
 
@@ -41,7 +45,8 @@ Một file vật lý trên đĩa, có thể xuất hiện ở nhiều Link. Là 
 _Avoid_: file, path
 
 **Link**:
-Một đường dẫn trỏ tới một Media Item. Một Media Item thường có một Link "kho" (theo loại) và một hoặc nhiều Link "hội thoại".
+Một đường dẫn trỏ tới một Media Item. Có hai loại: Link "kho" (theo loại) và Link "hội thoại".
+Tài liệu thường có một Link kho và một hoặc nhiều Link hội thoại; ảnh và video tải từ khoảng 07/2026 chỉ có một Link hội thoại.
 _Avoid_: hardlink (chi tiết cài đặt), copy, bản sao
 
 **Conversation**:
@@ -53,7 +58,8 @@ Tên do người dùng tự đặt cho một Conversation để nhận ra nó. C
 _Avoid_: tên hội thoại, nickname
 
 **Shared Media Item**:
-Media Item thuộc về nhiều Conversation (ví dụ ảnh được chuyển tiếp). Chỉ được dọn khi mọi Conversation của nó đều được chọn.
+Media Item thuộc về nhiều Conversation (ví dụ tài liệu được chuyển tiếp). Chỉ được dọn khi mọi Conversation của nó đều được chọn.
+Ảnh và video chuyển tiếp từ khoảng 07/2026 không phải Shared Media Item: mỗi Conversation giữ một Media Item riêng có cùng nội dung.
 
 **Media Kind**:
 Phân loại Media Item theo nội dung: Ảnh, Video, Tài liệu, Thoại. Tài liệu không bao giờ được chọn sẵn.
